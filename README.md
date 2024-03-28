@@ -112,6 +112,8 @@ $ cmake -DCMAKE_BUILD_TYPE=Debug -DBUSTUB_SANITIZER=thread ..
 $ make -j`nproc`
 ```
 
+Start of the journey!
+
 There are some differences between macOS and Linux (i.e., mutex behavior) that might cause test cases
 to produce different results in different platforms. We recommend students to use a Linux VM for running
 test cases and reproducing errors whenever possible.
