@@ -7,7 +7,6 @@ namespace bustub {
 
 template <class T>
 auto Trie::Get(std::string_view key) const -> const T * {
-  throw NotImplementedException("Trie::Get is not implemented.");
   if (!root_) return nullptr;
   std::shared_ptr<const TrieNode> p = root_;
   for (const auto &ch : key) {
@@ -30,6 +29,7 @@ template <class T>
 auto Trie::Put(std::string_view key, T value) const -> Trie {
   // You should walk through the trie and create new nodes if necessary. If the node corresponding to the key already
   // exists, you should create a new `TrieNodeWithValue`.
+
   if (!root_) {
     std::shared_ptr<TrieNode> new_root = std::make_shared<TrieNode>();
     std::shared_ptr<TrieNode> prev_node = new_root;
@@ -38,61 +38,51 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
       std::shared_ptr<TrieNode> new_child;
       if (idx == key.size() - 1) {
         new_child = std::make_shared<TrieNodeWithValue<T>>(std::make_shared<T>(std::move(value)));
-        prev_node->children_[key[idx]] = new_child;
+        prev_node->children_[key.at(idx)] = new_child;
       } else {
         new_child = std::make_shared<TrieNode>();
-        prev_node->children_[key[idx]] = new_child;
+        prev_node->children_[key.at(idx)] = new_child;
       }
       prev_node = new_child;
     }
     return Trie(new_root);
   }
 
-  std::stack<std::unique_ptr<TrieNode>> visited_nodes;
-  std::stack<char> visited_chars;
-
   std::shared_ptr<const TrieNode> p = root_;
-  size_t idx;
+  std::vector<std::unique_ptr<TrieNode>> visited_nodes;
+
+  size_t idx = 0;
   for (idx = 0; idx < key.size(); ++idx) {
-    const char ch = key.at(idx);
-    if (p->children_.find(ch) == p->children_.end())  // can't find the key
+    if (p->children_.find(key.at(idx)) == p->children_.end())
       break;
     else {
-      visited_nodes.emplace(p->Clone());
-      visited_chars.emplace(ch);
-      p = p->children_.at(ch);
+      visited_nodes.emplace_back(p->Clone());
+      p = p->children_.at(key.at(idx));
     }
   }
 
   std::shared_ptr<TrieNode> backtrace_node;
-  if (idx == key.size()) {
-    // find the key, but we don't know whether the node is value_node
-    backtrace_node =
-        std::move(std::make_unique<TrieNodeWithValue<T>>(p->children_, std::make_shared<T>(std::move(value))));
+  if (idx == key.size()) {  // find the key
+    backtrace_node = std::make_shared<TrieNodeWithValue<T>>(p->children_, std::make_shared<T>(std::move(value)));
     backtrace_node->is_value_node_ = true;
   } else {
-    // we can't find the key
-    backtrace_node =
-        std::move(std::make_unique<TrieNodeWithValue<T>>(p->children_, std::make_shared<T>(std::move(value))));
-    backtrace_node->is_value_node_ = true;
-
+    backtrace_node = std::make_shared<TrieNode>();
     std::shared_ptr<TrieNode> prev_node = backtrace_node;
 
-    for (size_t i = idx; i < key.size(); ++i) {
-      std::shared_ptr<TrieNode> new_child = std::make_shared<TrieNode>();
-      prev_node->children_[key[i]] = new_child;
+    for (size_t j = idx; j < key.size(); ++j) {
+      std::shared_ptr<TrieNode> new_child;
+      if (j == key.size() - 1)
+        new_child = std::make_shared<TrieNodeWithValue<T>>(std::make_shared<T>(std::move(value)));
+      else
+        new_child = std::make_shared<TrieNode>();
+      prev_node->children_[key.at(j)] = new_child;
       prev_node = new_child;
     }
   }
 
-  // backtrace
-  while (!visited_nodes.empty()) {
-    std::unique_ptr<TrieNode> top_node = std::move(visited_nodes.top());
-    char ch = visited_chars.top();
-    visited_nodes.pop();
-    visited_chars.pop();
-    top_node->children_[ch] = backtrace_node;
-    backtrace_node = std::move(top_node);
+  for (int j = visited_nodes.size() - 1; j >= 0; --j) {
+    visited_nodes[j]->children_[key[j]] = backtrace_node;
+    backtrace_node = std::move(visited_nodes[j]);
   }
   return Trie(backtrace_node);
 }
@@ -100,8 +90,7 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
 auto Trie::Remove(std::string_view key) const -> Trie {
   // You should walk through the trie and remove nodes if necessary. If the node doesn't contain a value any more,
   // you should convert it to `TrieNode`. If a node doesn't have children any more, you should remove it.
-  if (!root_)
-    return Trie();
+  if (!root_) return Trie();
 
   std::vector<std::shared_ptr<TrieNode>> visited_nodes;
   std::shared_ptr<const TrieNode> p = root_;
@@ -122,11 +111,19 @@ auto Trie::Remove(std::string_view key) const -> Trie {
   // backtrace
   std::shared_ptr<const TrieNode> prev_node = no_value_node;
   for (int i = (int)(visited_nodes.size() - 1); i >= 0; --i) {
-    if (prev_node->children_.empty()) // if the node doesn't have children,remove it
+    if (prev_node->children_.empty())  // if the node doesn't have children,remove it
       visited_nodes[i]->children_.erase(key[i]);
-    prev_node=visited_nodes[i];
+    prev_node = visited_nodes[i];
   }
-  return Trie(visited_nodes.front());
+
+  if (key.empty()) {
+    if (no_value_node->children_.empty())
+      return Trie{};
+    else
+      return Trie(no_value_node);
+  } else {
+    return Trie(visited_nodes.front());
+  }
 }
 
 // Below are explicit instantiation of template functions.
