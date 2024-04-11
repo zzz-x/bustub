@@ -53,7 +53,7 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
 
   size_t idx = 0;
   for (idx = 0; idx < key.size(); ++idx) {
-    if (p->children_.find(key.at(idx)) == p->children_.end())
+    if (p->children_.find(key.at(idx)) == p->children_.end()) // can't find the key
       break;
     else {
       visited_nodes.emplace_back(p->Clone());
@@ -63,10 +63,11 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
 
   std::shared_ptr<TrieNode> backtrace_node;
   if (idx == key.size()) {  // find the key
+    //set value
     backtrace_node = std::make_shared<TrieNodeWithValue<T>>(p->children_, std::make_shared<T>(std::move(value)));
     backtrace_node->is_value_node_ = true;
   } else {
-    backtrace_node = std::make_shared<TrieNode>();
+    backtrace_node = p->Clone();
     std::shared_ptr<TrieNode> prev_node = backtrace_node;
 
     for (size_t j = idx; j < key.size(); ++j) {
@@ -92,14 +93,14 @@ auto Trie::Remove(std::string_view key) const -> Trie {
   // you should convert it to `TrieNode`. If a node doesn't have children any more, you should remove it.
   if (!root_) return Trie();
 
-  std::vector<std::shared_ptr<TrieNode>> visited_nodes;
+  std::vector<std::unique_ptr<TrieNode>> visited_nodes;
   std::shared_ptr<const TrieNode> p = root_;
   size_t idx;
   for (idx = 0; idx < key.size(); ++idx) {
     if (p->children_.find(key[idx]) == p->children_.end())
       return Trie(root_);
     else {
-      visited_nodes.emplace_back(std::move(p->Clone()));
+      visited_nodes.emplace_back(p->Clone());
       p = p->children_.at(key[idx]);
     }
   }
@@ -111,19 +112,15 @@ auto Trie::Remove(std::string_view key) const -> Trie {
   // backtrace
   std::shared_ptr<const TrieNode> prev_node = no_value_node;
   for (int i = (int)(visited_nodes.size() - 1); i >= 0; --i) {
-    if (prev_node->children_.empty())  // if the node doesn't have children,remove it
+    if (prev_node->children_.empty()&& !prev_node->is_value_node_)  // if the node doesn't have children,remove it
       visited_nodes[i]->children_.erase(key[i]);
-    prev_node = visited_nodes[i];
-  }
-
-  if (key.empty()) {
-    if (no_value_node->children_.empty())
-      return Trie{};
     else
-      return Trie(no_value_node);
-  } else {
-    return Trie(visited_nodes.front());
+      visited_nodes[i]->children_[key[i]]=prev_node;
+    prev_node = std::move(visited_nodes[i]);
   }
+  if(prev_node->children_.empty()&&!prev_node->is_value_node_)
+    prev_node=nullptr;
+  return Trie(prev_node);
 }
 
 // Below are explicit instantiation of template functions.
