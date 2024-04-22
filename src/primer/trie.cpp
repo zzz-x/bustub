@@ -53,9 +53,9 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
 
   size_t idx = 0;
   for (idx = 0; idx < key.size(); ++idx) {
-    if (p->children_.find(key.at(idx)) == p->children_.end()) // can't find the key
+    if (p->children_.find(key.at(idx)) == p->children_.end()) {  // can't find the key
       break;
-    else {
+    } else {
       visited_nodes.emplace_back(p->Clone());
       p = p->children_.at(key.at(idx));
     }
@@ -63,7 +63,7 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
 
   std::shared_ptr<TrieNode> backtrace_node;
   if (idx == key.size()) {  // find the key
-    //set value
+    // set value
     backtrace_node = std::make_shared<TrieNodeWithValue<T>>(p->children_, std::make_shared<T>(std::move(value)));
     backtrace_node->is_value_node_ = true;
   } else {
@@ -97,9 +97,9 @@ auto Trie::Remove(std::string_view key) const -> Trie {
   std::shared_ptr<const TrieNode> p = root_;
   size_t idx;
   for (idx = 0; idx < key.size(); ++idx) {
-    if (p->children_.find(key[idx]) == p->children_.end())
+    if (p->children_.find(key[idx]) == p->children_.end()) {
       return Trie(root_);
-    else {
+    } else {
       visited_nodes.emplace_back(p->Clone());
       p = p->children_.at(key[idx]);
     }
@@ -111,15 +111,14 @@ auto Trie::Remove(std::string_view key) const -> Trie {
   std::shared_ptr<TrieNode> no_value_node = std::make_shared<TrieNode>(p->children_);
   // backtrace
   std::shared_ptr<const TrieNode> prev_node = no_value_node;
-  for (int i = (int)(visited_nodes.size() - 1); i >= 0; --i) {
-    if (prev_node->children_.empty()&& !prev_node->is_value_node_)  // if the node doesn't have children,remove it
+  for (int i = static_cast<int>(visited_nodes.size() - 1); i >= 0; --i) {
+    if (prev_node->children_.empty() && !prev_node->is_value_node_)  // if the node doesn't have children,remove it
       visited_nodes[i]->children_.erase(key[i]);
     else
-      visited_nodes[i]->children_[key[i]]=prev_node;
+      visited_nodes[i]->children_[key[i]] = prev_node;
     prev_node = std::move(visited_nodes[i]);
   }
-  if(prev_node->children_.empty()&&!prev_node->is_value_node_)
-    prev_node=nullptr;
+  if (prev_node->children_.empty() && !prev_node->is_value_node_) prev_node = nullptr;
   return Trie(prev_node);
 }
 
