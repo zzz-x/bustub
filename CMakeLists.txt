@@ -254,17 +254,17 @@ set(P0_FILES
         "src/include/execution/expressions/string_expression.h"
 )
 add_custom_target(check-clang-tidy-p0
-        ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py # run LLVM's clang-tidy script
-        -clang-tidy-binary ${CLANG_TIDY_BIN} # using our clang-tidy binary
-        -p ${CMAKE_BINARY_DIR} # using cmake's generated compile commands
+        ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py                     # run LLVM's clang-tidy script
+        -clang-tidy-binary ${CLANG_TIDY_BIN}                              # using our clang-tidy binary
+        -p ${CMAKE_BINARY_DIR}                                            # using cmake's generated compile commands
         ${P0_FILES}
-)
+        )
 add_custom_target(submit-p0
         zip project0-submission.zip
         ${P0_FILES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
+        )
+        
 set(P1_FILES
         "src/include/storage/page/page_guard.h"
         "src/storage/page/page_guard.cpp"

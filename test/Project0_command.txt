@@ -1,0 +1,20 @@
+cd build
+make -j32 sqllogictest
+./bin/bustub-sqllogictest ../test/sql/p0.01-lower-upper.slt --verbose
+./bin/bustub-sqllogictest ../test/sql/p0.02-function-error.slt --verbose
+./bin/bustub-sqllogictest ../test/sql/p0.03-string-scan.slt --verbose
+
+
+cd build
+make trie_test trie_store_test -j32
+make trie_noncopy_test trie_store_noncopy_test -j32
+./test/trie_test
+./test/trie_noncopy_test
+./test/trie_store_test
+./test/trie_store_noncopy_test
+
+make format
+make check-lint
+make check-clang-tidy-p0
+
+make submit-p0
