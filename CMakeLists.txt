@@ -250,24 +250,26 @@ add_custom_target(fix-clang-tidy-diff
 # hardcode some files to check here for each project.
 # ##########################################################
 set(P0_FILES
+        "src/include/primer/trie_answer.h"
+        "src/include/primer/trie_store.h"
+        "src/include/primer/trie.h"
+        "src/primer/trie_store.cpp"
+        "src/primer/trie.cpp"
         "src/planner/plan_func_call.cpp"
         "src/include/execution/expressions/string_expression.h"
-        "src/include/primer/orset.h"
-        "src/primer/orset.cpp"
-)
-
+        )
 add_custom_target(check-clang-tidy-p0
-        ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py # run LLVM's clang-tidy script
-        -clang-tidy-binary ${CLANG_TIDY_BIN} # using our clang-tidy binary
-        -p ${CMAKE_BINARY_DIR} # using cmake's generated compile commands
+        ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py                     # run LLVM's clang-tidy script
+        -clang-tidy-binary ${CLANG_TIDY_BIN}                              # using our clang-tidy binary
+        -p ${CMAKE_BINARY_DIR}                                            # using cmake's generated compile commands
         ${P0_FILES}
-)
+        )
 add_custom_target(submit-p0
         zip project0-submission.zip
         ${P0_FILES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
+        )
+        
 set(P1_FILES
         "src/include/buffer/lru_k_replacer.h"
         "src/buffer/lru_k_replacer.cpp"
