@@ -26,21 +26,22 @@ namespace bustub {
 // NOLINTNEXTLINE
 auto Planner::GetFuncCallFromFactory(const std::string &func_name, std::vector<AbstractExpressionRef> args)
     -> AbstractExpressionRef {
-
-      if(func_name!="lower" || func_name !="upper"){
-        throw Exception(fmt::format("func call {} not supported in planner yet",func_name));
-      }
-
-      if(args.size()!=1){
-        throw Exception(fmt::format("Invalid number of args"));
-      }
-      StringExpressionType expr_type = (func_name == "lower") ? StringExpressionType::Lower : StringExpressionType::Upper;
-      auto ptr = std::make_shared<StringExpression>(args[0], expr_type);
-      return ptr; 
-
   // 1. check if the parsed function name is "lower" or "upper".
   // 2. verify the number of args (should be 1), refer to the test cases for when you should throw an `Exception`.
   // 3. return a `StringExpression` std::shared_ptr.
+  if (func_name == "lower" || func_name == "upper") {
+    if (args.size() != 1) {
+      throw Exception(fmt::format("Invalid number of args"));
+    }
+    auto string_arg = dynamic_cast<StringExpression *>(args[0].get());
+    if (string_arg == nullptr) {
+      throw Exception(fmt::format("Invalid arg type"));
+    }
+
+    StringExpressionType expr_type = (func_name == "lower") ? StringExpressionType::Lower : StringExpressionType::Upper;
+    auto ptr = std::make_shared<StringExpression>(args[0], expr_type);
+    return ptr;
+  }
   throw Exception(fmt::format("func call {} not supported in planner yet", func_name));
 }
 
