@@ -38,7 +38,52 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
 
 BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 
-auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * { return nullptr; }
+auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page *
+{ 
+  //TODO： whether record this as an access to frame
+  if(free_list_.empty() || replacer_->Size()==0)
+    return nullptr;
+
+  frame_id_t frame_id;
+  //search a valid frame
+  if(!free_list_.empty()){
+    // first search in free list
+    frame_id=free_list_.front();
+    free_list_.pop_front();
+  }
+  else{
+    // search evictable frames
+    bool evict_flag=replacer_->Evict(&frame_id);
+    if(!evict_flag)
+      throw std::invalid_argument("no evictable frames");
+    Page& replaced_page = pages_[frame_id];
+    // write back if dirty
+    if(replaced_page.IsDirty()){
+      disk_manager_->WritePage(replaced_page.GetPageId(),replaced_page.GetData());
+      replaced_page.is_dirty_=false;
+    }
+    // erase the record in page_table
+    page_table_.erase(replaced_page.GetPageId());
+  }
+
+  // allocate a page id and record it in page_table
+  *page_id=AllocatePage();
+  page_table_.emplace(*page_id,frame_id);
+
+  // reset the pages data
+  Page& page=pages_[frame_id];
+  page.ResetMemory();
+  page.page_id_=*page_id;
+  page.pin_count_ = 0;
+
+  // pin the page
+  {
+    replacer_->SetEvictable(frame_id,false);
+    page.pin_count_+=1;
+  }
+
+  return &page;
+}
 
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
   return nullptr;
