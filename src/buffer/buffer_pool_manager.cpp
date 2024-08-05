@@ -76,21 +76,80 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page *
   page.page_id_=*page_id;
   page.pin_count_ = 0;
 
-  // pin the page
-  {
-    replacer_->SetEvictable(frame_id,false);
-    page.pin_count_+=1;
-  }
+  // pin and record the page
+  replacer_->RecordAccess(frame_id,AccessType::Unknown);
+  replacer_->SetEvictable(frame_id,false);
+  page.pin_count_+=1;
 
   return &page;
 }
 
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
-  return nullptr;
-}
+  
+  auto frame_iter=this->page_table_.find(page_id);
+  frame_id_t frame_id;
+  // search from buffer pool first
+  if(frame_iter!=this->page_table_.end()){
+    frame_id=frame_iter->second;
+    //disable evict and record access
+    if(access_type!=AccessType::Scan){
+      replacer_->RecordAccess(frame_id,access_type);
+    }
+    replacer_->SetEvictable(frame_id,false);
+    pages_[frame_id].pin_count_+=1;
+    return &pages_[frame_id];
+  }
+
+  if(free_list_.empty() && replacer_->Size()==0)
+    return nullptr;
+  
+  if(!free_list_.empty()){
+    frame_id=free_list_.front();
+    free_list_.pop_front();
+  }
+  else{
+    bool evict_flag=replacer_->Evict(&frame_id);
+    if(!evict_flag)
+      throw std::invalid_argument("no evictable frames");
+    Page& replaced_page=pages_[frame_id];
+    //write back first if dirty
+    if(replaced_page.IsDirty()){
+      disk_manager_->WritePage(replaced_page.GetPageId(),replaced_page.GetData());
+      replaced_page.is_dirty_=false;
+    }
+    page_table_.erase(replaced_page.GetPageId());
+  }
+
+  page_table_.emplace(page_id,frame_id);
+  Page& page=pages_[frame_id];
+  //TODO: reset operation may only do when evictable
+  page.ResetMemory();
+  page.page_id_=page_id;
+  page.pin_count_=0;
+
+  replacer_->RecordAccess(frame_id,AccessType::Unknown);
+  replacer_->SetEvictable(frame_id,false);
+  page.pin_count_+=1;
+
+}   
 
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {
-  return false;
+  auto iter=page_table_.find(page_id);
+  // return false if page_id not in buffer or its pin count already been zero
+  if(iter==page_table_.end() || pages_[iter->second].GetPinCount()<=0)
+    return false;
+  
+  frame_id_t frame_id=iter->second;
+  Page& page=pages_[frame_id];
+
+  page.pin_count_-=1;
+
+  if(page.GetPinCount()==0){
+    replacer_->SetEvictable(frame_id,true);
+  }
+  
+  page.is_dirty_=is_dirty;
+  return true;
 }
 
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool { return false; }
