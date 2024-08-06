@@ -131,6 +131,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
   replacer_->SetEvictable(frame_id,false);
   page.pin_count_+=1;
 
+  return &page;
 }   
 
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {

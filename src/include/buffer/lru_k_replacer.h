@@ -162,7 +162,7 @@ class LRUKReplacer {
   size_t curr_size_{0};
   [[maybe_unused]] size_t replacer_size_;
   size_t k_;
-  [[maybe_unused]] std::mutex latch_;
+  std::mutex latch_;
 };
 
 }  // namespace bustub
