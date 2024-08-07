@@ -18,14 +18,12 @@
 
 namespace bustub {
 
+
+// only reset the page when use this page
+
 BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager, size_t replacer_k,
                                      LogManager *log_manager)
     : pool_size_(pool_size), disk_manager_(disk_manager), log_manager_(log_manager) {
-  // TODO(students): remove this line after you have implemented the buffer pool manager
-  throw NotImplementedException(
-      "BufferPoolManager is not implemented yet. If you have finished implementing BPM, please remove the throw "
-      "exception line in `buffer_pool_manager.cpp`.");
-
   // we allocate a consecutive memory space for the buffer pool
   pages_ = new Page[pool_size_];
   replacer_ = std::make_unique<LRUKReplacer>(pool_size, replacer_k);
@@ -41,7 +39,7 @@ BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page *
 { 
   //TODO： whether record this as an access to frame
-  if(free_list_.empty() || replacer_->Size()==0)
+  if(free_list_.empty() && replacer_->Size()==0)
     return nullptr;
 
   frame_id_t frame_id;
@@ -148,16 +146,59 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
   if(page.GetPinCount()==0){
     replacer_->SetEvictable(frame_id,true);
   }
-  
+
   page.is_dirty_=is_dirty;
   return true;
 }
 
-auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool { return false; }
+auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool 
+{
+  // TODO: whether to remove the page in buffer
+  BUSTUB_ASSERT(page_id!=INVALID_PAGE_ID,"page id should be valid");
+  auto frame_iter=page_table_.find(page_id);
+  if(frame_iter==page_table_.end())
+    return false;
+  frame_id_t frame_id=frame_iter->second;
+  Page&page=pages_[frame_id];
+  // regradless of the dirty flag, flsuh the page instantly
+  disk_manager_->WritePage(page.GetPageId(),page.GetData());
+  // reset the dirty flag
+  page.is_dirty_ =false;
 
-void BufferPoolManager::FlushAllPages() {}
+  return true;
+}
 
-auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool { return false; }
+void BufferPoolManager::FlushAllPages() {
+
+  for(auto[page_id,frame_id]:page_table_){
+    Page&page=pages_[frame_id];
+    BUSTUB_ASSERT(page_id==page.GetPageId(),"inconsistent page id");
+    disk_manager_->WritePage(page.GetPageId(),page.GetData());
+    page.is_dirty_ = false;
+  }
+
+}
+
+auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool
+{
+  auto frame_iter=page_table_.find(page_id);
+  // page not in buffer, just return true
+  if(frame_iter==page_table_.end())
+    return true;
+  frame_id_t frame_id =frame_iter->second;
+  Page& page=pages_[frame_id];
+  if(page.GetPinCount()!=0)
+    return false;
+  
+  page_table_.erase(page_id);
+  replacer_->Remove(frame_id);
+
+  free_list_.push_back(frame_id);
+  page.clear();
+  DeallocatePage(page_id);
+
+  return true;
+}
 
 auto BufferPoolManager::AllocatePage() -> page_id_t { return next_page_id_++; }
 
