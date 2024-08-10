@@ -124,6 +124,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
   page.ResetMemory();
   page.page_id_=page_id;
   page.pin_count_=0;
+  disk_manager_->ReadPage(page_id,page.GetData());
 
   replacer_->RecordAccess(frame_id,AccessType::Unknown);
   replacer_->SetEvictable(frame_id,false);
@@ -153,7 +154,6 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
 
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool 
 {
-  // TODO: whether to remove the page in buffer
   BUSTUB_ASSERT(page_id!=INVALID_PAGE_ID,"page id should be valid");
   auto frame_iter=page_table_.find(page_id);
   if(frame_iter==page_table_.end())
