@@ -32,14 +32,14 @@ constexpr size_t INF = std::numeric_limits<size_t>::max();
 class LRUKNode {
  public:
   LRUKNode(size_t fid, size_t k, bool is_evictable = false) : k_(k), fid_(fid), is_evictable_(is_evictable) {}
-  bool GetEvictable() const;
+  auto GetEvictable() const -> bool;
   void SetEvictable(bool is_evictable);
   void RecordAccess(size_t timestamp);
-  size_t GetEarliestStamp() const;
-  size_t GetKDistance(size_t curr_timestamp) const;
+  auto GetEarliestStamp() const -> size_t;
+  auto GetKDistance(size_t curr_timestamp) const -> size_t;
 
-  bool HasKHistory() const;
-  frame_id_t GetFrameId() const;
+  auto HasKHistory() const -> bool;
+  auto GetFrameId() const -> frame_id_t;
 
  private:
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */

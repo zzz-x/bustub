@@ -36,7 +36,7 @@ class Page {
     ResetMemory();
   }
 
-  inline void clear() {
+  inline void Clear() {
     ResetMemory();
     page_id_ = INVALID_PAGE_ID;
     pin_count_ = 0;
