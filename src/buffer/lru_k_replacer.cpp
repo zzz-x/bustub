@@ -65,7 +65,7 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
   this->current_timestamp_ += 1;
   // scan should not disturb lru-k
   if (AccessType::Scan == access_type) return;
-  if (AccessType::Get == access_type || AccessType::Unknown == access_type ) {
+  if (AccessType::Get == access_type || AccessType::Unknown == access_type) {
     auto iter = node_store_.find(frame_id);
     if (iter == node_store_.end()) {
       std::shared_ptr<LRUKNode> node = std::make_shared<LRUKNode>(frame_id, k_, false);
@@ -78,7 +78,7 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
-  std::scoped_lock<std::mutex>lock(latch_);
+  std::scoped_lock<std::mutex> lock(latch_);
   auto iter = node_store_.find(frame_id);
   BUSTUB_ASSERT(iter != node_store_.end(), "Must set evictable for a valid existed frame");
   auto node = iter->second;
@@ -92,7 +92,7 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
-  std::scoped_lock<std::mutex>lock(latch_);
+  std::scoped_lock<std::mutex> lock(latch_);
   auto iter = node_store_.find(frame_id);
   if (iter == node_store_.end()) return;
   if (iter->second->GetEvictable() == false) throw bustub::Exception("Remove a non-evictable frame!");
@@ -100,8 +100,8 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   node_store_.erase(frame_id);
 }
 
-auto LRUKReplacer::Size() -> size_t { 
-  std::scoped_lock<std::mutex>lock(latch_);
+auto LRUKReplacer::Size() -> size_t {
+  std::scoped_lock<std::mutex> lock(latch_);
   return curr_size_;
 }
 

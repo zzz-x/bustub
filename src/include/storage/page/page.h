@@ -36,7 +36,12 @@ class Page {
     ResetMemory();
   }
 
-  inline void clear() { ResetMemory();page_id_=INVALID_PAGE_ID;pin_count_=0;is_dirty_=false;}
+  inline void clear() {
+    ResetMemory();
+    page_id_ = INVALID_PAGE_ID;
+    pin_count_ = 0;
+    is_dirty_ = false;
+  }
   /** Default destructor. */
   ~Page() { delete[] data_; }
 

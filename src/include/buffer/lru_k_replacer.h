@@ -14,11 +14,11 @@
 
 #include <limits>
 #include <list>
+#include <memory>
 #include <mutex>  // NOLINT
 #include <numeric>
 #include <unordered_map>
 #include <vector>
-#include <memory>
 
 #include "common/config.h"
 #include "common/macros.h"
@@ -38,8 +38,8 @@ class LRUKNode {
   size_t GetEarliestStamp() const;
   size_t GetKDistance(size_t curr_timestamp) const;
 
-  bool HasKHistory()const;
-  frame_id_t GetFrameId()const;
+  bool HasKHistory() const;
+  frame_id_t GetFrameId() const;
 
  private:
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */

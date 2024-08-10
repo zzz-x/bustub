@@ -57,6 +57,12 @@ class BasicPageGuard {
    * When a page guard goes out of scope, it should behave as if
    * the page guard was dropped.
    */
+
+  void RLatch();
+  void RUnlatch();
+  void WLatch();
+  void WUnlatch();
+
   ~BasicPageGuard();
 
   auto PageId() -> page_id_t { return page_->GetPageId(); }
@@ -82,7 +88,7 @@ class BasicPageGuard {
   friend class ReadPageGuard;
   friend class WritePageGuard;
 
-  [[maybe_unused]] BufferPoolManager *bpm_{nullptr};
+  BufferPoolManager *bpm_{nullptr};
   Page *page_{nullptr};
   bool is_dirty_{false};
 };
