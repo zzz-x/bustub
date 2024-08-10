@@ -193,7 +193,10 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   replacer_->Remove(frame_id);
 
   free_list_.push_back(frame_id);
-  page.Clear();
+  page.ResetMemory();
+  page.page_id_ = INVALID_PAGE_ID;
+  page.pin_count_ = 0;
+  page.is_dirty_ = false;
   DeallocatePage(page_id);
 
   return true;
