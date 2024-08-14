@@ -76,7 +76,52 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
       node->RecordAccess(current_timestamp_);
       node_store_.emplace(frame_id, node);
     } else {
-      iter->second->RecordAccess(current_timestamp_);
+      auto node = iter->second;
+      size_t history_size=node->GetHistorySize();
+      if(history_size<k_-1){
+        //如果已经在list_without_k中，则先清除原来的位置
+        auto pos_iter=iter_in_list_without_k.find(frame_id);
+        if(pos_iter!=iter_in_list_without_k.end()){
+          //list_without_k不为空才需要清除
+          auto node_iter=pos_iter->second;
+          nodes_without_k_.erase(node_iter);
+          iter_in_list_without_k.erase(frame_id);
+        }
+        //移动到尾部，并记录位置
+        nodes_without_k_.push_back(node);
+        iter_in_list_without_k.emplace(frame_id,nodes_without_k_.end());
+        //访问记录
+        iter->second->RecordAccess(current_timestamp_);
+      }
+      else {
+        if(history_size==k_-1){
+          //如果记录数量为k-1,则需要先从list_without_k中删掉当前node
+          auto pos_iter=iter_in_list_without_k.find(frame_id);
+          BUSTUB_ENSURE(pos_iter!=iter_in_list_without_k.end(),"");
+          auto node_iter=pos_iter->second;
+          //删掉node
+          nodes_without_k_.erase(node_iter);
+          iter_in_list_without_k.erase(frame_id);
+          //访问记录，此时记录变为了K
+          iter->second->RecordAccess(current_timestamp_);
+        }
+        //下面要移动到list_with_k
+        size_t k_distance = iter->second->GetKDistance(current_timestamp_);
+        //如果已经在k_list中，则先删掉，对于从list_without_k移动到list_with_k的情况，不会触发
+        auto pos_iter=iter_in_list_with_k.find(frame_id);
+        if(pos_iter!=iter_in_list_with_k.end()){
+          nodes_with_k_.erase(nodes_with_k_.begin()+pos_iter->second);
+          iter_in_list_with_k.erase(frame_id);
+        }
+        //从大到小排序，找第一个更小的插入位置
+        auto insert_iter=std::lower_bound(nodes_with_k_.begin(),nodes_with_k_.end(),[k_distance,this](auto item){
+          return item > item->GetKDistance(this->current_timestamp_);
+        });
+        //更新idx
+        iter_in_list_with_k[frame_id]=insert_iter-nodes_with_k_.begin();
+        //再插入到排好序的数组中
+        nodes_with_k_.insert(insert_iter,iter->second);
+      }
     }
   }
 }
@@ -141,5 +186,7 @@ auto LRUKNode::GetEarliestStamp() const -> size_t {
 auto LRUKNode::HasKHistory() const -> bool { return history_.size() == k_; }
 
 auto LRUKNode::GetFrameId() const -> frame_id_t { return this->fid_; }
+
+auto LRUKNode::GetHistorySize() const ->size_t { return history_.size(); }
 
 }  // namespace bustub

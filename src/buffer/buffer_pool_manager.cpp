@@ -36,7 +36,7 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
 BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
-  // TODO(myself) ： whether record this as an access to frame
+  std::scoped_lock<std::mutex> lock(latch_);
   if (free_list_.empty() && replacer_->Size() == 0) {
     return nullptr;
   }
@@ -82,6 +82,7 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 }
 
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
+  std::scoped_lock<std::mutex> lock(latch_);
   auto frame_iter = this->page_table_.find(page_id);
   frame_id_t frame_id;
   // search from buffer pool first
@@ -133,6 +134,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
 }
 
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {
+  std::scoped_lock<std::mutex> lock(latch_);
   auto iter = page_table_.find(page_id);
   // return false if page_id not in buffer or its pin count already been zero
   if (iter == page_table_.end() || pages_[iter->second].GetPinCount() <= 0) {
@@ -148,11 +150,15 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
     replacer_->SetEvictable(frame_id, true);
   }
 
-  page.is_dirty_ = is_dirty;
+  // 仅当需要设置为dirty时，才需要覆盖
+  if (is_dirty) {
+    page.is_dirty_ = is_dirty;
+  }
   return true;
 }
 
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
+  std::scoped_lock<std::mutex> lock(latch_);
   BUSTUB_ASSERT(page_id != INVALID_PAGE_ID, "page id should be valid");
   auto frame_iter = page_table_.find(page_id);
   if (frame_iter == page_table_.end()) {
@@ -169,6 +175,7 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
 }
 
 void BufferPoolManager::FlushAllPages() {
+  std::scoped_lock<std::mutex> lock(latch_);
   for (auto [page_id, frame_id] : page_table_) {
     Page &page = pages_[frame_id];
     BUSTUB_ASSERT(page_id == page.GetPageId(), "inconsistent page id");
@@ -178,6 +185,7 @@ void BufferPoolManager::FlushAllPages() {
 }
 
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
+  std::scoped_lock<std::mutex> lock(latch_);
   auto frame_iter = page_table_.find(page_id);
   // page not in buffer, just return true
   if (frame_iter == page_table_.end()) {
@@ -205,11 +213,13 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
 auto BufferPoolManager::AllocatePage() -> page_id_t { return next_page_id_++; }
 
 auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard {
+  std::scoped_lock<std::mutex> lock(latch_);
   auto page = FetchPage(page_id);
   return {this, page};
 }
 
 auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
+  std::scoped_lock<std::mutex> lock(latch_);
   auto page = FetchPage(page_id);
   if (page != nullptr) {
     page->RLatch();
@@ -218,6 +228,7 @@ auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
 }
 
 auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
+  std::scoped_lock<std::mutex> lock(latch_);
   auto page = FetchPage(page_id);
   if (page != nullptr) {
     page->WLatch();
@@ -226,6 +237,7 @@ auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
 }
 
 auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard {
+  std::scoped_lock<std::mutex> lock(latch_);
   auto page = this->NewPage(page_id);
   return {this, page};
 }
