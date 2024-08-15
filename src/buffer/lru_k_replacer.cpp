@@ -159,6 +159,13 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   if (!iter->second->GetEvictable()) {
     throw bustub::Exception("Remove a non-evictable frame!");
   }
+  size_t history_size = iter->second->GetHistorySize();
+  if (history_size < k_) {
+    nodes_without_k_.remove(iter->second);
+    iter_in_list_without_k_.erase(frame_id);
+  } else {
+    nodes_with_k_.remove(iter->second);
+  }
   curr_size_ -= 1;
   node_store_.erase(frame_id);
 }

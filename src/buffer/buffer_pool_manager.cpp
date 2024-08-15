@@ -213,13 +213,11 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
 auto BufferPoolManager::AllocatePage() -> page_id_t { return next_page_id_++; }
 
 auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard {
-  std::scoped_lock<std::mutex> lock(latch_);
   auto page = FetchPage(page_id);
   return {this, page};
 }
 
 auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
-  std::scoped_lock<std::mutex> lock(latch_);
   auto page = FetchPage(page_id);
   if (page != nullptr) {
     page->RLatch();
@@ -228,7 +226,6 @@ auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
 }
 
 auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
-  std::scoped_lock<std::mutex> lock(latch_);
   auto page = FetchPage(page_id);
   if (page != nullptr) {
     page->WLatch();
@@ -237,7 +234,6 @@ auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
 }
 
 auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard {
-  std::scoped_lock<std::mutex> lock(latch_);
   auto page = this->NewPage(page_id);
   return {this, page};
 }
