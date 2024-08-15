@@ -40,7 +40,7 @@ class LRUKNode {
 
   auto HasKHistory() const -> bool;
   auto GetFrameId() const -> frame_id_t;
-  auto GetHistorySize() const ->size_t;
+  auto GetHistorySize() const -> size_t;
 
  private:
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
@@ -165,11 +165,10 @@ class LRUKReplacer {
   size_t k_;
   std::mutex latch_;
 
-  std::vector<std::shared_ptr<LRUKNode>> nodes_with_k_;
+  std::list<std::shared_ptr<LRUKNode>> nodes_with_k_;
   std::list<std::shared_ptr<LRUKNode>> nodes_without_k_;
-  using lru_list_iter=std::list<std::shared_ptr<LRUKNode>>::iterator;
-  std::unordered_map<frame_id_t,size_t> iter_in_list_with_k;
-  std::unordered_map<frame_id_t,lru_list_iter> iter_in_list_without_k;
+  using lru_list_iter = std::list<std::shared_ptr<LRUKNode>>::iterator;
+  std::unordered_map<frame_id_t, lru_list_iter> iter_in_list_without_k_;
 };
 
 }  // namespace bustub

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/lru_k_replacer.h"
+#include <algorithm>
 #include <optional>
 #include "common/exception.h"
 
@@ -20,45 +21,43 @@ LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_fra
 
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::scoped_lock<std::mutex> lock(latch_);
-  std::optional<size_t> target_value;
-  std::optional<frame_id_t> target_id;
-  bool has_inf = false;
-  for (auto &item : node_store_) {
-    auto &node = item.second;
-    if (!node->GetEvictable()) {
-      continue;
-    }
+  if (!nodes_without_k_.empty()) {
+    // nodes without k 不为空，则先从这些node中选择
+    for (auto node_iter = nodes_without_k_.begin(); node_iter != nodes_without_k_.end(); ++node_iter) {
+      auto &node_item = *node_iter;
+      if (!node_item->GetEvictable()) {
+        continue;
+      }
+      *frame_id = node_item->GetFrameId();
 
-    if (has_inf) {
-      if (!node->HasKHistory()) {
-        size_t estamp = node->GetEarliestStamp();
-        if (estamp < target_value) {
-          target_value = estamp;
-          target_id = node->GetFrameId();
-        }
-      }
-    } else {
-      if (!node->HasKHistory()) {
-        has_inf = true;
-        target_id = node->GetFrameId();
-        target_value = node->GetEarliestStamp();
-      } else {
-        size_t distance = node->GetKDistance(current_timestamp_);
-        if (!target_value.has_value() || distance > target_value) {
-          target_value = distance;
-          target_id = node->GetFrameId();
-        }
-      }
+      node_store_.erase(*frame_id);
+      nodes_without_k_.erase(node_iter);
+      iter_in_list_without_k_.erase(*frame_id);
+      this->curr_size_ -= 1;
+      return true;
     }
   }
 
-  if (target_id.has_value()) {
-    *frame_id = *target_id;
+  std::optional<size_t> target_distance;
+  std::optional<decltype(nodes_with_k_.begin())> target_iter;
+  for (auto iter = nodes_with_k_.begin(); iter != nodes_with_k_.end(); ++iter) {
+    if (!(*iter)->GetEvictable()) {
+      continue;
+    }
+    size_t distance = (*iter)->GetKDistance(current_timestamp_);
+    if (target_distance < distance) {
+      target_distance = distance;
+      target_iter = iter;
+    }
+  }
+
+  if (target_distance) {
+    *frame_id = (*(*target_iter))->GetFrameId();
+    nodes_with_k_.erase(*target_iter);
     node_store_.erase(*frame_id);
     this->curr_size_ -= 1;
     return true;
   }
-
   return false;
 }
 
@@ -72,55 +71,65 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
   if (AccessType::Get == access_type || AccessType::Unknown == access_type) {
     auto iter = node_store_.find(frame_id);
     if (iter == node_store_.end()) {
+      // 新node，直接移动到list_without_k的尾部，并记录位置
       std::shared_ptr<LRUKNode> node = std::make_shared<LRUKNode>(frame_id, k_, false);
       node->RecordAccess(current_timestamp_);
       node_store_.emplace(frame_id, node);
+      // 如果是新node,直接移动到list尾部
+      nodes_without_k_.push_back(node);
+      iter_in_list_without_k_.emplace(frame_id, std::prev(nodes_without_k_.end(), 1));
     } else {
       auto node = iter->second;
-      size_t history_size=node->GetHistorySize();
-      if(history_size<k_-1){
-        //如果已经在list_without_k中，则先清除原来的位置
-        auto pos_iter=iter_in_list_without_k.find(frame_id);
-        if(pos_iter!=iter_in_list_without_k.end()){
-          //list_without_k不为空才需要清除
-          auto node_iter=pos_iter->second;
+      size_t history_size = node->GetHistorySize();
+      if (history_size < k_ - 1) {
+        // 如果已经在list_without_k中,访问记录即可，因为决定排序的是其最早被访问的时间
+#if 0
+        auto pos_iter = iter_in_list_without_k_.find(frame_id);
+        if (pos_iter != iter_in_list_without_k_.end()) {
+          // list_without_k不为空才需要清除
+          auto node_iter = pos_iter->second;
           nodes_without_k_.erase(node_iter);
-          iter_in_list_without_k.erase(frame_id);
+          iter_in_list_without_k_.erase(frame_id);
         }
-        //移动到尾部，并记录位置
+        // 移动到尾部，并记录位置
         nodes_without_k_.push_back(node);
-        iter_in_list_without_k.emplace(frame_id,nodes_without_k_.end());
-        //访问记录
+        iter_in_list_without_k_.emplace(frame_id, std::next(nodes_without_k_.rbegin(), 1).base());
+#endif
+        // 访问记录
         iter->second->RecordAccess(current_timestamp_);
-      }
-      else {
-        if(history_size==k_-1){
-          //如果记录数量为k-1,则需要先从list_without_k中删掉当前node
-          auto pos_iter=iter_in_list_without_k.find(frame_id);
-          BUSTUB_ENSURE(pos_iter!=iter_in_list_without_k.end(),"");
-          auto node_iter=pos_iter->second;
-          //删掉node
+      } else {
+        if (history_size == k_ - 1) {
+          // 如果记录数量为k-1,则需要先从list_without_k中删掉当前node
+          auto pos_iter = iter_in_list_without_k_.find(frame_id);
+          BUSTUB_ENSURE(pos_iter != iter_in_list_without_k_.end(), "1");
+          auto node_iter = pos_iter->second;
+          // 删掉node
           nodes_without_k_.erase(node_iter);
-          iter_in_list_without_k.erase(frame_id);
-          //访问记录，此时记录变为了K
-          iter->second->RecordAccess(current_timestamp_);
+          iter_in_list_without_k_.erase(frame_id);
+          // 插入到list_with_k
+          nodes_with_k_.push_back(iter->second);
         }
-        //下面要移动到list_with_k
+        // 访问记录，此时记录长度一定为k
+        iter->second->RecordAccess(current_timestamp_);
+#if 0
+        // 下面要移动list_with_k
         size_t k_distance = iter->second->GetKDistance(current_timestamp_);
-        //如果已经在k_list中，则先删掉，对于从list_without_k移动到list_with_k的情况，不会触发
-        auto pos_iter=iter_in_list_with_k.find(frame_id);
-        if(pos_iter!=iter_in_list_with_k.end()){
-          nodes_with_k_.erase(nodes_with_k_.begin()+pos_iter->second);
+        // 如果已经在k_list中，则先删掉，对于从list_without_k移动到list_with_k的情况，不会触发
+        auto pos_iter = iter_in_list_with_k.find(frame_id);
+        if (pos_iter != iter_in_list_with_k.end()) {
+          nodes_with_k_.erase(nodes_with_k_.begin() + pos_iter->second);
           iter_in_list_with_k.erase(frame_id);
         }
-        //从大到小排序，找第一个更小的插入位置
-        auto insert_iter=std::lower_bound(nodes_with_k_.begin(),nodes_with_k_.end(),[k_distance,this](auto item){
-          return item > item->GetKDistance(this->current_timestamp_);
-        });
-        //更新idx
-        iter_in_list_with_k[frame_id]=insert_iter-nodes_with_k_.begin();
-        //再插入到排好序的数组中
-        nodes_with_k_.insert(insert_iter,iter->second);
+        // 从大到小排序，找第一个更小的插入位置
+        auto insert_iter = std::lower_bound(nodes_with_k_.begin(), nodes_with_k_.end(), k_distance,
+                                            [this](const std::shared_ptr<LRUKNode> &item, size_t distance) {
+                                              return distance > item->GetKDistance(this->current_timestamp_);
+                                            });
+        // 更新idx
+        iter_in_list_with_k[frame_id] = insert_iter - nodes_with_k_.begin();
+        // 再插入到排好序的数组中
+        nodes_with_k_.insert(insert_iter, iter->second);
+#endif
       }
     }
   }
@@ -187,6 +196,6 @@ auto LRUKNode::HasKHistory() const -> bool { return history_.size() == k_; }
 
 auto LRUKNode::GetFrameId() const -> frame_id_t { return this->fid_; }
 
-auto LRUKNode::GetHistorySize() const ->size_t { return history_.size(); }
+auto LRUKNode::GetHistorySize() const -> size_t { return history_.size(); }
 
 }  // namespace bustub
