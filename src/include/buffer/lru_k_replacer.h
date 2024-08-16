@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>  // NOLINT
 #include <numeric>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -51,6 +52,12 @@ class LRUKNode {
   size_t k_;
   frame_id_t fid_;
   bool is_evictable_{false};
+};
+
+struct LRUKNodeComp {
+  auto operator()(const std::shared_ptr<LRUKNode> &a, const std::shared_ptr<LRUKNode> &b) const -> bool {
+    return a->GetEarliestStamp() < b->GetEarliestStamp();
+  }
 };
 
 /**
@@ -165,7 +172,8 @@ class LRUKReplacer {
   size_t k_;
   std::mutex latch_;
 
-  std::list<std::shared_ptr<LRUKNode>> nodes_with_k_;
+  std::set<std::shared_ptr<LRUKNode>, LRUKNodeComp> nodes_with_k_;
+  // std::list<std::shared_ptr<LRUKNode>> nodes_with_k_;
   std::list<std::shared_ptr<LRUKNode>> nodes_without_k_;
   using lru_list_iter = std::list<std::shared_ptr<LRUKNode>>::iterator;
   std::unordered_map<frame_id_t, lru_list_iter> iter_in_list_without_k_;

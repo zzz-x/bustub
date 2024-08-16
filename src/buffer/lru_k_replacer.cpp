@@ -38,22 +38,12 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     }
   }
 
-  std::optional<size_t> target_distance;
-  std::optional<decltype(nodes_with_k_.begin())> target_iter;
   for (auto iter = nodes_with_k_.begin(); iter != nodes_with_k_.end(); ++iter) {
     if (!(*iter)->GetEvictable()) {
       continue;
     }
-    size_t distance = (*iter)->GetKDistance(current_timestamp_);
-    if (target_distance < distance) {
-      target_distance = distance;
-      target_iter = iter;
-    }
-  }
-
-  if (target_distance) {
-    *frame_id = (*(*target_iter))->GetFrameId();
-    nodes_with_k_.erase(*target_iter);
+    *frame_id = (*iter)->GetFrameId();
+    nodes_with_k_.erase(iter);
     node_store_.erase(*frame_id);
     this->curr_size_ -= 1;
     return true;
@@ -94,11 +84,15 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
           // 删掉node
           nodes_without_k_.erase(node_iter);
           iter_in_list_without_k_.erase(frame_id);
-          // 插入到list_with_k
-          nodes_with_k_.push_back(iter->second);
         }
-        // 访问记录，此时记录长度一定为k
-        iter->second->RecordAccess(current_timestamp_);
+        {
+          if (auto node_iter = nodes_with_k_.find(iter->second); node_iter != nodes_with_k_.end()) {
+            nodes_with_k_.erase(node_iter);
+          }
+          // 访问记录，此时记录长度一定为k
+          iter->second->RecordAccess(current_timestamp_);
+          nodes_with_k_.emplace(iter->second);
+        }
       }
     }
   }
@@ -133,7 +127,7 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
     nodes_without_k_.remove(iter->second);
     iter_in_list_without_k_.erase(frame_id);
   } else {
-    nodes_with_k_.remove(iter->second);
+    nodes_with_k_.erase(iter->second);
   }
   curr_size_ -= 1;
   node_store_.erase(frame_id);
