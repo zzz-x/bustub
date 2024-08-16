@@ -22,7 +22,6 @@
 
 namespace bustub {
 
-
 // 参考https://zhuanlan.zhihu.com/p/615312257
 TEST(PageGuardTest, ReadTest) {
   const std::string db_name = "test.db";

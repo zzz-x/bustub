@@ -12,9 +12,14 @@
 
 #pragma once
 
+#include <condition_variable>
+#include <future>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <optional>
+#include <queue>
+#include <thread>
 #include <unordered_map>
 
 #include "buffer/lru_k_replacer.h"
@@ -23,6 +28,86 @@
 #include "storage/disk/disk_manager.h"
 #include "storage/page/page.h"
 #include "storage/page/page_guard.h"
+
+namespace bustub {
+
+template <class T>
+class Channel {
+ public:
+  Channel() = default;
+  ~Channel() = default;
+
+  void Put(T element) {
+    std::unique_lock<std::mutex> lock(lock_);
+    q_.push(std::move(element));
+    lock.unlock();
+    cv_.notify_all();
+  }
+
+  auto Get() -> T {
+    std::unique_lock<std::mutex> lock(lock_);
+    cv_.wait(lock, [&]() { return !q_.empty(); });
+    T element = std::move(q_.front());
+    q_.pop();
+    return element;
+  }
+
+ private:
+  std::mutex lock_;
+  std::queue<T> q_;
+  std::condition_variable cv_;
+};
+
+struct DiskRequest {
+  bool is_write_;
+  page_id_t page_id_;
+  char *data_;
+  std::promise<bool> call_back_;
+
+  DiskRequest(bool is_write, page_id_t page_id, char *data, std::promise<bool> call_back)
+      : is_write_(is_write), page_id_(page_id), data_(data), call_back_(std::move(call_back)) {}
+};
+
+class DiskScheduler {
+ public:
+  explicit DiskScheduler(DiskManager *manager) : disk_manager_(manager) {
+    background_thread_.emplace([&]() { BackGroundWork(); });
+  }
+
+  ~DiskScheduler() {
+    if (background_thread_.has_value()) {
+      disk_channel_.Put(std::nullopt);
+      background_thread_->join();
+    }
+  }
+
+  void Schedule(DiskRequest request) { disk_channel_.Put(std::move(request)); }
+
+  auto CreatePromise() -> std::promise<bool> { return {}; }
+
+  void BackGroundWork() {
+    // 消费者
+    while (true) {
+      auto request = disk_channel_.Get();
+      if (request == std::nullopt) {
+        break;
+      }
+      if (request->is_write_) {
+        disk_manager_->WritePage(request->page_id_, request->data_);
+      } else {
+        disk_manager_->ReadPage(request->page_id_, request->data_);
+      }
+      request->call_back_.set_value(true);
+    }
+  }
+
+ private:
+  Channel<std::optional<DiskRequest>> disk_channel_;
+  DiskManager *disk_manager_;
+  std::optional<std::thread> background_thread_;
+};
+
+}  // namespace bustub
 
 namespace bustub {
 
@@ -173,6 +258,8 @@ class BufferPoolManager {
   auto DeletePage(page_id_t page_id) -> bool;
 
  private:
+  std::unique_ptr<DiskScheduler> scheduler_;
+
   /** Number of pages in the buffer pool. */
   const size_t pool_size_;
   /** The next page id to be allocated  */

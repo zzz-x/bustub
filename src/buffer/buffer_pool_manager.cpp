@@ -27,6 +27,7 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   pages_ = new Page[pool_size_];
   replacer_ = std::make_unique<LRUKReplacer>(pool_size, replacer_k);
 
+  scheduler_ = std::make_unique<DiskScheduler>(disk_manager);
   // Initially, every page is in the free list.
   for (size_t i = 0; i < pool_size_; ++i) {
     free_list_.emplace_back(static_cast<int>(i));
@@ -56,7 +57,13 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
     Page &replaced_page = pages_[frame_id];
     // write back if dirty
     if (replaced_page.IsDirty()) {
-      disk_manager_->WritePage(replaced_page.GetPageId(), replaced_page.GetData());
+      auto promise = scheduler_->CreatePromise();
+      auto future = promise.get_future();
+      DiskRequest r(true, replaced_page.GetPageId(), replaced_page.GetData(), std::move(promise));
+      scheduler_->Schedule(std::move(r));
+      bool r_result = future.get();
+      BUSTUB_ENSURE(r_result == true, "must sucessfully write");
+
       replaced_page.is_dirty_ = false;
     }
     // erase the record in page_table
@@ -112,7 +119,13 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
     Page &replaced_page = pages_[frame_id];
     // write back first if dirty
     if (replaced_page.IsDirty()) {
-      disk_manager_->WritePage(replaced_page.GetPageId(), replaced_page.GetData());
+      auto promise = scheduler_->CreatePromise();
+      auto future = promise.get_future();
+      DiskRequest r(true, replaced_page.GetPageId(), replaced_page.GetData(), std::move(promise));
+      scheduler_->Schedule(std::move(r));
+      bool r_result = future.get();
+      BUSTUB_ENSURE(r_result == true, "must sucessfully write");
+
       replaced_page.is_dirty_ = false;
     }
     page_table_.erase(replaced_page.GetPageId());
@@ -124,7 +137,13 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
   page.ResetMemory();
   page.page_id_ = page_id;
   page.pin_count_ = 0;
-  disk_manager_->ReadPage(page_id, page.GetData());
+
+  auto promise = scheduler_->CreatePromise();
+  auto future = promise.get_future();
+  DiskRequest r(false, page_id, page.GetData(), std::move(promise));
+  scheduler_->Schedule(std::move(r));
+  auto r_result = future.get();
+  BUSTUB_ENSURE(r_result == true, "must sucessfully read");
 
   replacer_->RecordAccess(frame_id, AccessType::Unknown);
   replacer_->SetEvictable(frame_id, false);
@@ -166,8 +185,15 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
   }
   frame_id_t frame_id = frame_iter->second;
   Page &page = pages_[frame_id];
-  // regradless of the dirty flag, flsuh the page instantly
-  disk_manager_->WritePage(page.GetPageId(), page.GetData());
+
+  // regradless of the dirty flag, flush the page instantly
+  auto promise = scheduler_->CreatePromise();
+  auto future = promise.get_future();
+  DiskRequest r(true, page.GetPageId(), page.GetData(), std::move(promise));
+  scheduler_->Schedule(std::move(r));
+  bool r_result = future.get();
+  BUSTUB_ENSURE(r_result == true, "must sucessfully write");
+
   // reset the dirty flag
   page.is_dirty_ = false;
 
@@ -179,7 +205,14 @@ void BufferPoolManager::FlushAllPages() {
   for (auto [page_id, frame_id] : page_table_) {
     Page &page = pages_[frame_id];
     BUSTUB_ASSERT(page_id == page.GetPageId(), "inconsistent page id");
-    disk_manager_->WritePage(page.GetPageId(), page.GetData());
+
+    auto promise = scheduler_->CreatePromise();
+    auto future = promise.get_future();
+    DiskRequest r(true, page.GetPageId(), page.GetData(), std::move(promise));
+    scheduler_->Schedule(std::move(r));
+    bool r_result = future.get();
+    BUSTUB_ENSURE(r_result == true, "must sucessfully write");
+
     page.is_dirty_ = false;
   }
 }
