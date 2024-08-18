@@ -13,7 +13,6 @@
 #pragma once
 
 #include <condition_variable>
-#include <future>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
@@ -21,6 +20,7 @@
 #include <queue>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"
@@ -37,19 +37,37 @@ class Channel {
   Channel() = default;
   ~Channel() = default;
 
-  void Put(T element) {
+  void Put(const T &element) {
     std::unique_lock<std::mutex> lock(lock_);
-    q_.push(std::move(element));
+    // printf("Put Page: %d  data: %s\n",element->page_id_,element->data_);
+    q_.push(element);
     lock.unlock();
-    cv_.notify_all();
+    cv_.notify_one();
   }
 
   auto Get() -> T {
     std::unique_lock<std::mutex> lock(lock_);
+    // printf("Get Sleep\n");
     cv_.wait(lock, [&]() { return !q_.empty(); });
+    // printf("Get Activated\n");
     T element = std::move(q_.front());
+    // printf("Get Page: %d  data: %s\n",element->page_id_,element->data_);
     q_.pop();
     return element;
+  }
+
+  auto Size() -> size_t {
+    std::unique_lock<std::mutex> lock(lock_);
+    return q_.size();
+  }
+
+  auto GetLastElem(T &elem) -> bool {
+    std::unique_lock<std::mutex> lock(lock_);
+    if (q_.empty()) {
+      return false;
+    }
+    elem = q_.back();
+    return true;
   }
 
  private:
@@ -62,49 +80,47 @@ struct DiskRequest {
   bool is_write_;
   page_id_t page_id_;
   char *data_;
-  std::promise<bool> call_back_;
 
-  DiskRequest(bool is_write, page_id_t page_id, char *data, std::promise<bool> call_back)
-      : is_write_(is_write), page_id_(page_id), data_(data), call_back_(std::move(call_back)) {}
+  DiskRequest();
+  DiskRequest(bool is_write, page_id_t page_id_, char *data);
+  ~DiskRequest();
+
+  auto operator=(const DiskRequest &other) -> DiskRequest &;
+  auto operator=(DiskRequest &&other) noexcept -> DiskRequest &;
+  DiskRequest(const DiskRequest &other);
+  DiskRequest(DiskRequest &&other) noexcept;
 };
 
-class DiskScheduler {
+class PageScheduler {
  public:
-  explicit DiskScheduler(DiskManager *manager) : disk_manager_(manager) {
-    background_thread_.emplace([&]() { BackGroundWork(); });
-  }
+  explicit PageScheduler(DiskManager *manager);
+  ~PageScheduler();
 
-  ~DiskScheduler() {
-    if (background_thread_.has_value()) {
-      disk_channel_.Put(std::nullopt);
-      background_thread_->join();
-    }
-  }
-
-  void Schedule(DiskRequest request) { disk_channel_.Put(std::move(request)); }
-
-  auto CreatePromise() -> std::promise<bool> { return {}; }
-
-  void BackGroundWork() {
-    // 消费者
-    while (true) {
-      auto request = disk_channel_.Get();
-      if (request == std::nullopt) {
-        break;
-      }
-      if (request->is_write_) {
-        disk_manager_->WritePage(request->page_id_, request->data_);
-      } else {
-        disk_manager_->ReadPage(request->page_id_, request->data_);
-      }
-      request->call_back_.set_value(true);
-    }
-  }
+  void Schedule(const DiskRequest &request);
+  void BackGroundWork();
+  auto GetRequestSize() -> size_t;
+  auto GetLastRequest() -> std::optional<DiskRequest>;
+  char *cache_data_;
+  bool cache_valid_;
 
  private:
   Channel<std::optional<DiskRequest>> disk_channel_;
   DiskManager *disk_manager_;
   std::optional<std::thread> background_thread_;
+};
+
+class DiskManagerProxy {
+ public:
+  explicit DiskManagerProxy(DiskManager *disk_manager);
+
+  void WriteToDisk(const DiskRequest &r);
+  void ReadFromDisk(page_id_t page_id, char *data);
+  void Clear() { request_map_.clear(); };
+
+ private:
+  std::unordered_map<page_id_t, std::shared_ptr<PageScheduler>> request_map_;
+  DiskManager *disk_manager_;
+  std::mutex lock_;
 };
 
 }  // namespace bustub
@@ -258,7 +274,7 @@ class BufferPoolManager {
   auto DeletePage(page_id_t page_id) -> bool;
 
  private:
-  std::unique_ptr<DiskScheduler> scheduler_;
+  std::unique_ptr<DiskManagerProxy> disk_proxy_;
 
   /** Number of pages in the buffer pool. */
   const size_t pool_size_;

@@ -62,12 +62,12 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType access_type) {
-  std::scoped_lock<std::mutex> lock(latch_);
-  this->current_timestamp_ += 1;
   // scan should not disturb lru-k
   if (AccessType::Scan == access_type) {
     return;
   }
+  std::scoped_lock<std::mutex> lock(latch_);
+  this->current_timestamp_ += 1;
   if (AccessType::Get == access_type || AccessType::Unknown == access_type) {
     auto iter = node_store_.find(frame_id);
     if (iter == node_store_.end()) {
