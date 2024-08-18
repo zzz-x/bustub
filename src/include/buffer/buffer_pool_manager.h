@@ -12,13 +12,13 @@
 
 #pragma once
 
-#include <condition_variable>
+#include <condition_variable>  // NOLINT
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <optional>
 #include <queue>
-#include <thread>
+#include <thread>  // NOLINT
 #include <unordered_map>
 #include <utility>
 
@@ -115,7 +115,7 @@ class DiskManagerProxy {
 
   void WriteToDisk(const DiskRequest &r);
   void ReadFromDisk(page_id_t page_id, char *data);
-  void Clear() { request_map_.clear(); };
+  void Clear() { request_map_.clear(); }
 
  private:
   std::unordered_map<page_id_t, std::shared_ptr<PageScheduler>> request_map_;
