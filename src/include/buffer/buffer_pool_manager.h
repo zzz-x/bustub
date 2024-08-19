@@ -13,6 +13,7 @@
 #pragma once
 
 #include <condition_variable>  // NOLINT
+#include <functional>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
@@ -28,6 +29,72 @@
 #include "storage/disk/disk_manager.h"
 #include "storage/page/page.h"
 #include "storage/page/page_guard.h"
+
+namespace bustub {
+
+class ThreadPool {
+ public:
+  ThreadPool(size_t pool_size);
+  ~ThreadPool();
+
+  //添加任务到线程池
+
+  template <class F, class... Args>
+  auto Enqueue(F &&func, Args &&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
+
+ private:
+  std::vector<std::thread> workers_;
+  std::queue<std::function<void()>> tasks_;
+  std::mutex lock_;
+  std::condition_variable cv_;
+  bool end;
+};
+
+ThreadPool::~ThreadPool()
+{
+  std::unique_lock<std::mutex> lock(lock_);
+  end=true;
+  lock.unlock();
+  cv_.notify_one();
+
+  for(auto& thread:workers_){
+    thread.join();
+  }
+}
+
+
+template<class F,class ...Args>
+auto ThreadPool::Enqueue(F&&func,Args&&... args)->std::future<typename std::result_of<F(Args...)>::type>
+{
+  using ret_t=typename std::result_of<F(Args...)>::type;
+
+  std::unique_lock<std::mutex> lock(lock_);
+
+  std::future<ret_t> ret;
+
+  return ret;
+}
+
+ThreadPool::ThreadPool(size_t pool_size):end{false} {
+  for (size_t idx = 0; idx < pool_size; ++idx) {
+    workers_.emplace_back([&]() {
+      while (1) {
+        std::unique_lock<std::mutex> lock(this->lock_);
+        this->cv_.wait(lock, !this->tasks_.empty() || end);
+        if (end && this->tasks_.empty()) { return; }
+
+        std::function<void()> func = std::move(this->tasks_.front());
+        this->tasks_.pop();
+
+        lock.unlock();
+
+        func();
+      }
+    });
+  }
+}
+
+}  // namespace bustub
 
 namespace bustub {
 
