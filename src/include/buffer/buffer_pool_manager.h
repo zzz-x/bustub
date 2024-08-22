@@ -16,16 +16,16 @@
 
 #include <condition_variable>  // NOLINT
 #include <functional>
+#include <future>  // NOLINT
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <optional>
 #include <queue>
 #include <thread>  // NOLINT
-#include <future>  // NOLINT
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
-#include <type_traits>
 
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"
@@ -38,13 +38,57 @@ namespace bustub {
 
 class ThreadPool {
  public:
-  ThreadPool(size_t pool_size);
-  ~ThreadPool();
+  ThreadPool(size_t pool_size) : end{false} {
+    for (size_t idx = 0; idx < pool_size; ++idx) {
+      workers_.emplace_back([&]() {
+        while (true) {
+          std::unique_lock<std::mutex> lock(this->lock_);
+          this->cv_.wait(lock, [&]() { return this->tasks_.empty() || end; });
+          if (end && this->tasks_.empty()) {
+            return;
+          }
 
-  //添加任务到线程池
+          std::function<void()> func = std::move(this->tasks_.front());
+          this->tasks_.pop();
+
+          lock.unlock();
+
+          func();
+        }
+      });
+    }
+  }
+
+  ~ThreadPool() {
+    std::unique_lock<std::mutex> lock(lock_);
+    end = true;
+    lock.unlock();
+    cv_.notify_all();
+
+    for (auto &thread : workers_) {
+      thread.join();
+    }
+  }
+
+  // 添加任务到线程池
 
   template <class F, class... Args>
-  auto ThreadPool::Enqueue(F&&func,Args&&... args)->std::future<decltype(func(std::forward<Args>(args)...))>;
+  auto Enqueue(F &&func, Args &&...args) -> std::future<decltype(func(std::forward<Args>(args)...))> {
+    using ret_t = decltype(func(std::forward<Args>(args)...));
+    auto task =
+        std::make_shared<std::packaged_task<ret_t()>(std::bind(std::forward<F>(func), std::forward<Args>(args)...))>;
+    std::future<ret_t> ret = task->get_future();
+
+    {
+      std::unique_lock<std::mutex> lock(lock_);
+      tasks_.push([task]() { (*task)(); });
+    }
+
+    cv_.notify_one();
+
+    return ret;
+  }
+
  private:
   std::vector<std::thread> workers_;
   std::queue<std::function<void()>> tasks_;
@@ -52,57 +96,6 @@ class ThreadPool {
   std::condition_variable cv_;
   bool end;
 };
-
-ThreadPool::~ThreadPool()
-{
-  std::unique_lock<std::mutex> lock(lock_);
-  end=true;
-  lock.unlock();
-  cv_.notify_all();
-
-  for(auto& thread:workers_){
-    thread.join();
-  }
-}
-
-
-template<class F,class ...Args>
-auto ThreadPool::Enqueue(F&&func,Args&&... args)->std::future<decltype(func(std::forward<Args>(args)...))>
-{
-  using ret_t=decltype(func(std::forward<Args>(args)...));
-  auto task =std::make_shared<std::packaged_task<ret_t()>(std::bind(std::forward<F>(func),std::forward<Args>(args)...))>;
-  std::future<ret_t> ret = task->get_future();
-
-  {
-    std::unique_lock<std::mutex> lock(lock_);
-    tasks_.push([task](){ (*task)();});
-  }
-
-  cv_.notify_one();
-
-  return ret;
-}
-
-ThreadPool::ThreadPool(size_t pool_size):end{false} {
-  for (size_t idx = 0; idx < pool_size; ++idx) {
-    workers_.emplace_back([&]() {
-      while (true) {
-        std::unique_lock<std::mutex> lock(this->lock_);
-        this->cv_.wait(lock, [&](){
-          return this->tasks_.empty() || end;
-          });
-        if (end && this->tasks_.empty()) { return; }
-
-        std::function<void()> func = std::move(this->tasks_.front());
-        this->tasks_.pop();
-
-        lock.unlock();
-
-        func();
-      }
-    });
-  }
-}
 
 }  // namespace bustub
 

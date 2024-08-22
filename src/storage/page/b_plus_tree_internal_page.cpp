@@ -24,27 +24,73 @@ namespace bustub {
  * Including set page type, set current size, and set max page size
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {
+  this->SetMaxSize(max_size);
+  this->SetPageType(IndexPageType::INTERNAL_PAGE);
+  this->SetSize(0);
+}
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
  * array offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  // replace with your own code
-  KeyType key{};
-  return key;
+  // 检查idx是否越界
+  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
+  return array_[index+1].first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
+  // 检查idx是否越界
+  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
+  array_[index+1].first = key;
+}
 
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
  * offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType { return 0; }
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
+  // 检查idx是否越界
+  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
+  return array_[index].second;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertVal(const KeyType&key,ValueType value,const KeyComparator&comparator)
+{
+  int idx=FindKeyIndex(key); //key[idx]<=value
+  int old_size=GetSize();
+
+  // 从idx开始的元素全部向后移动一位
+  for(int j=old_size;j>idx;--j){
+    std::swap(array_[j],array_[j-1]);
+  }
+  // 插入value
+  array_[idx]=std::move(value);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+int B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindKeyIndex(const KeyType& key,const KeyComparator&comparator)
+{
+  int left=0;
+  int right = GetSize();
+
+  while(left<right){
+    int mid=left+(right-left)/2;
+    KeyType mid_key = KeyAt(mid);
+    if(comparator(mid_key,key)){
+      left=mid+1;
+    }
+    else{
+      right=mid;
+    }
+  }
+  return left;
+}
+
 
 // valuetype for internalNode should be page id_t
 template class BPlusTreeInternalPage<GenericKey<4>, page_id_t, GenericComparator<4>>;
