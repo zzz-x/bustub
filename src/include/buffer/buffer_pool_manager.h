@@ -26,6 +26,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"
@@ -38,21 +39,20 @@ namespace bustub {
 
 class ThreadPool {
  public:
-  ThreadPool(size_t pool_size) : end{false} {
+  explicit ThreadPool(size_t pool_size) : end{false} {
     for (size_t idx = 0; idx < pool_size; ++idx) {
       workers_.emplace_back([&]() {
         while (true) {
-          std::unique_lock<std::mutex> lock(this->lock_);
-          this->cv_.wait(lock, [&]() { return this->tasks_.empty() || end; });
-          if (end && this->tasks_.empty()) {
-            return;
+          std::function<void()> func;
+          {
+            std::unique_lock<std::mutex> lock(this->lock_);
+            this->cv_.wait(lock, [&]() { return !this->tasks_.empty() || end; });
+            if (end && this->tasks_.empty()) {
+              return;
+            }
+            func = std::move(this->tasks_.front());
+            this->tasks_.pop();
           }
-
-          std::function<void()> func = std::move(this->tasks_.front());
-          this->tasks_.pop();
-
-          lock.unlock();
-
           func();
         }
       });
@@ -60,9 +60,10 @@ class ThreadPool {
   }
 
   ~ThreadPool() {
-    std::unique_lock<std::mutex> lock(lock_);
-    end = true;
-    lock.unlock();
+    {
+      std::unique_lock<std::mutex> lock(lock_);
+      end = true;
+    }
     cv_.notify_all();
 
     for (auto &thread : workers_) {
@@ -71,14 +72,12 @@ class ThreadPool {
   }
 
   // 添加任务到线程池
-
   template <class F, class... Args>
-  auto Enqueue(F &&func, Args &&...args) -> std::future<decltype(func(std::forward<Args>(args)...))> {
+  auto Enqueue(F &&func, Args &&... args) -> std::future<decltype(func(std::forward<Args>(args)...))> {
     using ret_t = decltype(func(std::forward<Args>(args)...));
     auto task =
-        std::make_shared<std::packaged_task<ret_t()>(std::bind(std::forward<F>(func), std::forward<Args>(args)...))>;
+        std::make_shared<std::packaged_task<ret_t()>>(std::bind(std::forward<F>(func), std::forward<Args>(args)...));
     std::future<ret_t> ret = task->get_future();
-
     {
       std::unique_lock<std::mutex> lock(lock_);
       tasks_.push([task]() { (*task)(); });
@@ -140,6 +139,11 @@ class Channel {
     return true;
   }
 
+  auto Empty() -> bool {
+    std::unique_lock<std::mutex> lock(lock_);
+    return q_.empty();
+  }
+
  private:
   std::mutex lock_;
   std::queue<T> q_;
@@ -163,25 +167,24 @@ struct DiskRequest {
 
 class PageScheduler {
  public:
-  explicit PageScheduler(DiskManager *manager);
+  explicit PageScheduler(DiskManager *manager, ThreadPool *worker);
   ~PageScheduler();
 
   void Schedule(const DiskRequest &request);
-  void BackGroundWork();
-  auto GetRequestSize() -> size_t;
   auto GetLastRequest() -> std::optional<DiskRequest>;
   char *cache_data_;
   bool cache_valid_;
 
  private:
-  Channel<std::optional<DiskRequest>> disk_channel_;
+  std::mutex lock_;
+  std::queue<DiskRequest> q_;
   DiskManager *disk_manager_;
-  std::optional<std::thread> background_thread_;
+  ThreadPool *thread_pool_;
 };
 
 class DiskManagerProxy {
  public:
-  explicit DiskManagerProxy(DiskManager *disk_manager);
+  explicit DiskManagerProxy(DiskManager *disk_manager, ThreadPool *worker);
 
   void WriteToDisk(const DiskRequest &r);
   void ReadFromDisk(page_id_t page_id, char *data);
@@ -190,6 +193,7 @@ class DiskManagerProxy {
  private:
   std::unordered_map<page_id_t, std::shared_ptr<PageScheduler>> request_map_;
   DiskManager *disk_manager_;
+  ThreadPool *thread_pool_;
   std::mutex lock_;
 };
 
@@ -345,6 +349,7 @@ class BufferPoolManager {
 
  private:
   std::unique_ptr<DiskManagerProxy> disk_proxy_;
+  ThreadPool *thread_pool_;
 
   /** Number of pages in the buffer pool. */
   const size_t pool_size_;

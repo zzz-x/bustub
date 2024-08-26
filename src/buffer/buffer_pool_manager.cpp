@@ -65,52 +65,73 @@ auto DiskRequest::operator=(DiskRequest &&other) noexcept -> DiskRequest & {
 }
 
 // Page Scheduler
-PageScheduler::PageScheduler(DiskManager *manager) : disk_manager_(manager) {
+PageScheduler::PageScheduler(DiskManager *manager, ThreadPool *worker) : disk_manager_(manager), thread_pool_(worker) {
   cache_valid_ = false;
   cache_data_ = new char[sizeof(char) * BUSTUB_PAGE_SIZE];
-  background_thread_.emplace([&]() { BackGroundWork(); });
 }
 
-PageScheduler::~PageScheduler() {
-  if (background_thread_.has_value()) {
-    disk_channel_.Put(std::nullopt);
-    background_thread_->join();
+PageScheduler::~PageScheduler() { delete[] cache_data_; }
+
+void PageScheduler::Schedule(const DiskRequest &request) {
+  // 一直写磁盘直到队列为空
+  auto write_fun = [this]() {
+    while (1) {
+      std::optional<DiskRequest> request;
+      {
+        std::unique_lock<std::mutex> lock(this->lock_);
+        if (!this->q_.empty()) {
+          request = std::move(q_.front());
+          q_.pop();
+        }
+      }
+
+      if (!request) {
+        break;
+      }
+      if (request->is_write_) {
+        disk_manager_->WritePage(request->page_id_, request->data_);
+      } else {
+        disk_manager_->ReadPage(request->page_id_, request->data_);
+      }
+
+      // 如果任务队列为空，那么设置cache数据并标记为有效
+      {
+        std::unique_lock<std::mutex> lock(this->lock_);
+        if (this->q_.empty()) {
+          memcpy(this->cache_data_, request->data_, sizeof(char) * BUSTUB_PAGE_SIZE);
+          this->cache_valid_ = true;
+          break;
+        }
+      }
+    }
+  };
+
+  size_t last_size;
+  {
+    // 队列为空时，才向线程池创建一个新任务。保证线程池内只有一个线程在执行一个page_id的任务
+    std::unique_lock<std::mutex> lock(lock_);
+    last_size = q_.size();
+    q_.push(request);
+    if (last_size == 0) {
+      thread_pool_->Enqueue(write_fun);
+    }
   }
-  cache_valid_ = false;
-  delete[] cache_data_;
 }
-
-void PageScheduler::Schedule(const DiskRequest &request) { disk_channel_.Put(request); }
-
-void PageScheduler::BackGroundWork() {
-  // 消费者
-  while (true) {
-    auto request = disk_channel_.Get();
-    if (request == std::nullopt) {
-      break;
-    }
-    if (request->is_write_) {
-      disk_manager_->WritePage(request->page_id_, request->data_);
-    } else {
-      disk_manager_->ReadPage(request->page_id_, request->data_);
-    }
-    if (disk_channel_.Size() == 0) {
-      memcpy(cache_data_, request->data_, sizeof(char) * BUSTUB_PAGE_SIZE);
-      cache_valid_ = true;
-    }
-  }
-}
-
-auto PageScheduler::GetRequestSize() -> size_t { return disk_channel_.Size(); }
 
 auto PageScheduler::GetLastRequest() -> std::optional<DiskRequest> {
   std::optional<DiskRequest> ret;
-  disk_channel_.GetLastElem(ret);
+  {
+    std::unique_lock<std::mutex> lock(this->lock_);
+    if (!q_.empty()) {
+      ret = q_.back();
+    }
+  }
   return ret;
 }
 
 // DiskManagerProxy
-DiskManagerProxy::DiskManagerProxy(DiskManager *disk_manager) : disk_manager_(disk_manager) {}
+DiskManagerProxy::DiskManagerProxy(DiskManager *disk_manager, ThreadPool *worker)
+    : disk_manager_(disk_manager), thread_pool_(worker) {}
 
 void DiskManagerProxy::WriteToDisk(const DiskRequest &r) {
   std::shared_ptr<PageScheduler> scheduler;
@@ -118,7 +139,7 @@ void DiskManagerProxy::WriteToDisk(const DiskRequest &r) {
     std::unique_lock lock(lock_);
     auto iter = request_map_.find(r.page_id_);
     if (iter == request_map_.end()) {
-      scheduler = std::make_shared<PageScheduler>(disk_manager_);
+      scheduler = std::make_shared<PageScheduler>(disk_manager_, thread_pool_);
       request_map_.emplace(r.page_id_, scheduler);
     } else {
       scheduler = iter->second;
@@ -160,8 +181,9 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   // we allocate a consecutive memory space for the buffer pool
   pages_ = new Page[pool_size_];
   replacer_ = std::make_unique<LRUKReplacer>(pool_size, replacer_k);
+  thread_pool_ = new ThreadPool(64);
 
-  disk_proxy_ = std::make_unique<DiskManagerProxy>(disk_manager);
+  disk_proxy_ = std::make_unique<DiskManagerProxy>(disk_manager, thread_pool_);
   // Initially, every page is in the free list.
   for (size_t i = 0; i < pool_size_; ++i) {
     free_list_.emplace_back(static_cast<int>(i));
@@ -169,6 +191,9 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
 }
 
 BufferPoolManager::~BufferPoolManager() {
+  printf("delete thread_pool\n");
+  delete thread_pool_;
+  printf("clear disk proxy\n");
   disk_proxy_->Clear();
   delete[] pages_;
 }

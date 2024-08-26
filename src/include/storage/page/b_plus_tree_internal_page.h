@@ -12,6 +12,7 @@
 
 #include <queue>
 #include <string>
+#include <vector>
 
 #include "storage/page/b_plus_tree_page.h"
 
@@ -73,10 +74,10 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    */
   auto ValueAt(int index) const -> ValueType;
 
-  void InsertVal(const KeyType& key,ValueType value,const KeyComparator& comparator);
+  void InsertVal(const KeyType &key, ValueType value, const KeyComparator &comparator);
 
-  //二分查找第一个大于等于
-  int FindKeyIndex(const KeyType& key,const KeyComparator& comparator);
+  // 二分查找第一个大于等于
+  int FindKeyIndex(const KeyType &key, const KeyComparator &comparator);
 
   /**
    * @brief For test only, return a string representing all keys in
@@ -108,6 +109,5 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   // Flexible array member for page data.
   std::vector<MappingType> array_;
   MappingType arr_[0];
-
 };
 }  // namespace bustub
