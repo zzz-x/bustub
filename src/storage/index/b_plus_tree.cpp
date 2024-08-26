@@ -40,6 +40,35 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   // Declaration of context instance.
   Context ctx;
   (void)ctx;
+  // header_page_id_中始终存放着root_page_id
+  page_id_t root_page_id=INVALID_PAGE_ID;
+  {
+    ReadPageGuard guard =bpm_->FetchPageRead(header_page_id_);
+    auto header_page=guard.As<BPlusTreeHeaderPage>();
+    root_page_id=header_page->root_page_id_;
+  }
+
+  if(root_page_id==INVALID_PAGE_ID){return false;}
+  ctx.root_page_id_=root_page_id;
+
+  // 读取root_page
+  ReadPageGuard guard = bpm_->FetchPageRead(root_page_id);
+  // 并不确定root page是叶节点还是内部节点
+  auto curr_page=guard.As<BPlusTreePage>();
+  auto curr_page_id=root_page_id;
+
+  while(!curr_page->IsLeafPage()){
+    const InternalPage* internal_page=guard.As<InternalPage>();
+    BUSTUB_ASSERT(internal_page!=nullptr,"Page should be internal");
+    // TODO: add find function
+  }
+  
+
+
+  
+  
+
+
   return false;
 }
 
