@@ -39,15 +39,15 @@ namespace bustub {
 
 class ThreadPool {
  public:
-  explicit ThreadPool(size_t pool_size) : end{false} {
+  explicit ThreadPool(size_t pool_size) {
     for (size_t idx = 0; idx < pool_size; ++idx) {
       workers_.emplace_back([&]() {
         while (true) {
           std::function<void()> func;
           {
             std::unique_lock<std::mutex> lock(this->lock_);
-            this->cv_.wait(lock, [&]() { return !this->tasks_.empty() || end; });
-            if (end && this->tasks_.empty()) {
+            this->cv_.wait(lock, [&]() { return !this->tasks_.empty() || end_; });
+            if (end_ && this->tasks_.empty()) {
               return;
             }
             func = std::move(this->tasks_.front());
@@ -62,7 +62,7 @@ class ThreadPool {
   ~ThreadPool() {
     {
       std::unique_lock<std::mutex> lock(lock_);
-      end = true;
+      end_ = true;
     }
     cv_.notify_all();
 
@@ -73,10 +73,9 @@ class ThreadPool {
 
   // 添加任务到线程池
   template <class F, class... Args>
-  auto Enqueue(F &&func, Args &&... args) -> std::future<decltype(func(std::forward<Args>(args)...))> {
+  auto Enqueue(F &&func, Args &&...args) -> std::future<decltype(func(std::forward<Args>(args)...))> {
     using ret_t = decltype(func(std::forward<Args>(args)...));
-    auto task =
-        std::make_shared<std::packaged_task<ret_t()>>(std::bind(std::forward<F>(func), std::forward<Args>(args)...));
+    auto task = std::make_shared<std::packaged_task<ret_t()>>([func, args...]() { func(args...); });
     std::future<ret_t> ret = task->get_future();
     {
       std::unique_lock<std::mutex> lock(lock_);
@@ -93,7 +92,7 @@ class ThreadPool {
   std::queue<std::function<void()>> tasks_;
   std::mutex lock_;
   std::condition_variable cv_;
-  bool end;
+  bool end_{false};
 };
 
 }  // namespace bustub

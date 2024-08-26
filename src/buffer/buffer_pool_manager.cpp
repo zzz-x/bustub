@@ -75,7 +75,7 @@ PageScheduler::~PageScheduler() { delete[] cache_data_; }
 void PageScheduler::Schedule(const DiskRequest &request) {
   // 一直写磁盘直到队列为空
   auto write_fun = [this]() {
-    while (1) {
+    while (true) {
       std::optional<DiskRequest> request;
       {
         std::unique_lock<std::mutex> lock(this->lock_);
