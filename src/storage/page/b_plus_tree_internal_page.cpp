@@ -36,14 +36,14 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
   // 检查idx是否越界
-  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
+  BUSTUB_ASSERT(index < size_, "Invalid idx !");
   return array_[index + 1].first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
   // 检查idx是否越界
-  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
+  BUSTUB_ASSERT(index < size_, "Invalid idx !");
   array_[index + 1].first = key;
 }
 
@@ -54,7 +54,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
   // 检查idx是否越界
-  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
+  BUSTUB_ASSERT(index < size_, "Invalid idx !");
   return array_[index].second;
 }
 
@@ -73,19 +73,41 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertVal(const KeyType &key, ValueType val
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-int B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindKeyIndex(const KeyType &key, const KeyComparator &comparator) {
-  int left = 0;
+int B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindKeyIndexLowerBound(const KeyType &key, const KeyComparator &comparator) {
+  // 左闭右开
+  int left = 1;
   int right = GetSize();
 
   while (left < right) {
     int mid = left + (right - left) / 2;
     KeyType mid_key = KeyAt(mid);
     if (comparator(mid_key, key)) {
+      // mid_key < key
       left = mid + 1;
     } else {
+      // mid_key >= key
       right = mid;
     }
   }
+  return left;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+int B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindKeyIndexUpperBound(const KeyType &key, const KeyComparator &comparator) {
+  // 左闭右开
+  int left = 1;
+  int right = GetSize();
+  while (left < right) {
+    int mid = left + (right - left) / 2;
+    KeyType mid_key = KeyAt(mid);
+    if (comparator(key, mid_key)) {
+      // mid_key < key
+      left = mid + 1;
+    } else {
+      // mid_key >=key
+    }
+  }
+
   return left;
 }
 

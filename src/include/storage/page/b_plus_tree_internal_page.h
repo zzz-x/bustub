@@ -76,8 +76,11 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
   void InsertVal(const KeyType &key, ValueType value, const KeyComparator &comparator);
 
-  // 二分查找第一个大于等于
-  int FindKeyIndex(const KeyType &key, const KeyComparator &comparator);
+  // 二分查找第一个大于等于key的位置，可以用来查询
+  int FindKeyIndexLowerBound(const KeyType &key, const KeyComparator &comparator);
+
+  // 二分查找第一个大于key的位置
+  int FindKeyIndexUpperBound(const KeyType &key, const KeyComparator &comparator);
 
   /**
    * @brief For test only, return a string representing all keys in
@@ -107,7 +110,6 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
  private:
   // Flexible array member for page data.
-  std::vector<MappingType> array_;
-  MappingType arr_[0];
+  MappingType array_[0];
 };
 }  // namespace bustub
