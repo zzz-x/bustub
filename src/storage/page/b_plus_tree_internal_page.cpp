@@ -36,14 +36,14 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
   // 检查idx是否越界
-  BUSTUB_ASSERT(index < size_, "Invalid idx !");
+  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
   return array_[index + 1].first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
   // 检查idx是否越界
-  BUSTUB_ASSERT(index < size_, "Invalid idx !");
+  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
   array_[index + 1].first = key;
 }
 
@@ -54,13 +54,14 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
   // 检查idx是否越界
-  BUSTUB_ASSERT(index < size_, "Invalid idx !");
+  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
   return array_[index].second;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertVal(const KeyType &key, ValueType value, const KeyComparator &comparator) {
-  int idx = FindKeyIndex(key, comparator);  // key[idx]<=value
+  // TODO: check the function here
+  int idx = FindKeyIndexLowerBound(key, comparator);  // key[idx]<=value
   int old_size = GetSize();
 
   // 从idx开始的元素全部向后移动一位

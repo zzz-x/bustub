@@ -1,5 +1,6 @@
 #include <sstream>
 #include <string>
+#include <optional>
 
 #include "common/exception.h"
 #include "common/logger.h"
@@ -27,6 +28,54 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
+
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::FindLeafPageWithKey(const KeyType& key,page_id_t& leaf_page_id) const ->FindLeafRetType
+{
+  // 先从header_page_id中读取page_id
+  page_id_t root_page_id = INVALID_PAGE_ID;
+  {
+    ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
+    const BPlusTreeHeaderPage* header_page = guard.As<BPlusTreeHeaderPage>();
+    root_page_id = header_page->root_page_id_;
+  }
+  if(root_page_id == INVALID_PAGE_ID){
+    return FindLeafRetType::EmptyTree;
+  }
+
+  auto curr_guard =bpm_->FetchPageRead(root_page_id);
+  auto curr_page = curr_guard.As<BPlusTreePage>();
+  auto curr_page_id = root_page_id;
+
+  while(!curr_page->IsLeafPage()){
+    const InternalPage* internal_page = curr_guard.As<InternalPage>();
+    BUSTUB_ASSERT(internal_page!=nullptr , "Page should be internal");
+    // 寻找key落在的区间，由于存储的结构，需要从index=1开始遍历
+    // 左闭右开
+    int key_idx=1;
+    for(key_idx=1;key_idx<internal_page->GetSize();++key_idx){
+      KeyType curr_key = internal_page->KeyAt(key_idx);
+      if(comparator_(key,curr_key)) {break;}
+    }
+    int val_idx =key_idx;
+    if(key_idx != internal_page->GetSize()){
+      val_idx=key_idx-1;
+    }
+
+    curr_page_id=internal_page->ValueAt(val_idx);
+    curr_guard=bpm_->FetchPageRead(curr_page_id);
+    curr_page= curr_guard.As<BPlusTreePage>();
+  }
+
+  leaf_page_id = curr_page_id;
+
+  return FindLeafRetType::Success;
+}
+
+
+
+
 /*****************************************************************************
  * SEARCH
  *****************************************************************************/
@@ -40,47 +89,16 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   // Declaration of context instance.
   Context ctx;
   (void)ctx;
-  // header_page_id_中始终存放着root_page_id
-  page_id_t root_page_id = INVALID_PAGE_ID;
-  // 先从 header_page_id 中读取 root_page_id
-  {
-    ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
-    auto header_page = guard.As<BPlusTreeHeaderPage>();
-    root_page_id = header_page->root_page_id_;
-  }
 
-  if (root_page_id == INVALID_PAGE_ID) {
+  page_id_t leaf_page_id;
+  // 先找到key所在的leaf page
+  auto flag=FindLeafPageWithKey(key,leaf_page_id);
+  if(flag !=FindLeafRetType::Success){
     return false;
-  }
-  ctx.root_page_id_ = root_page_id;
-
-  // 读取root_page
-  ReadPageGuard guard = bpm_->FetchPageRead(root_page_id);
-  // 记录当前Page和当前page_id
-  const BPlusTreePage* curr_page = guard.As<BPlusTreePage>();
-  page_id_t curr_page_id = root_page_id;
-
-  // 一直寻找，直到是叶子节点
-  while (!curr_page->IsLeafPage()) {
-    const InternalPage *internal_page = guard.As<InternalPage>();
-    BUSTUB_ASSERT(internal_page != nullptr, "Page should be internal");
-    // 寻找key落在的区间，由于存储的原因，要从第1个结点开始寻找
-    std::optional<KeyType> prev_key;
-    // 左闭右开
-    int key_idx=1;
-    for (int key_idx = 1; key_idx < internal_page->GetSize(); ++key_idx) {
-      KeyType curr_key = internal_page->KeyAt(key_idx);
-      if (!comparator_(curr_key, key)) break;
-    }
-    int range_idx = key_idx;
-    if (key_idx != internal_page->GetSize()) range_idx = key_idx - 1;
-
-    curr_page_id = internal_page->ValueAt(range_idx);
-    guard = bpm_->FetchPageRead(curr_page_id);
-    curr_page = guard.As<BPlusTreePage>();
   }
 
   // 寻找到了对应的叶子结点，遍历匹配即可
+  auto guard = bpm_->FetchPageRead(leaf_page_id);
   const LeafPage *leaf = guard.As<LeafPage>();
   bool found = false;
   for (int idx = 0; idx < leaf->GetSize(); ++idx) {
@@ -113,24 +131,25 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   // Declaration of context instance.
   Context ctx;
   (void)ctx;
-  // 先找到root_page
-  page_id_t root_page_id=INVALID_PAGE_ID;
-  {
-    auto guard=bpm_->FetchPageRead(header_page_id_);
-    auto root_page=guard.As<BPlusTreeHeaderPage>();
-    root_page_id = root_page->root_page_id_;
+
+  page_id_t leaf_page_id;
+  // 找到Key应该处于的leaf_page
+  auto flag = FindLeafPageWithKey(key,leaf_page_id);
+
+  if(flag==FindLeafRetType::EmptyTree){
+    auto guard = bpm_->NewPageGuarded(&leaf_page_id);
+    LeafPage* root_page =guard.AsMut<LeafPage>();
+    root_page->Init(this->leaf_max_size_);
+    // 将新的root_page_id记录到header_page_id中
+    auto header_page_guard=bpm_->FetchPageWrite(header_page_id_);
+    auto head_page = header_page_guard.AsMut<BPlusTreeHeaderPage>();
+    head_page->root_page_id_=leaf_page_id;
+  }
+  else{
+    BUSTUB_ASSERT(flag==FindLeafRetType::Success,"Should always find the leaf page of the key");
   }
 
-  // 首先找到应该包含该K的leaf page
-
-  page_id_t curr_page_id = root_page_id;
-  auto guard = bpm_->FetchPageRead(curr_page_id);
-  auto curr_page = guard.As<BPlusTreePage>();
-  if(curr_page->GetSize()){
-    // root page为空，这个时候直接创建一个leaf page
-    BPlusTreeLeafPage new_leaf_page = BPlusTreeLeafPage()
-  }
-
+  // 向leaf page中插入key value
 
   return false;
 }

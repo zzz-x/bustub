@@ -60,7 +60,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto KeyAt(int index) const -> KeyType;
   auto ValueAt(int index) const -> ValueType;
 
-  bool Insert(const KeyType&key,cosnt ValueType& value,const KeyComparator& comp);
+  bool Insert(const KeyType&key,const ValueType& value,const KeyComparator& comp);
 
   /**
    * @brief for test only return a string representing all keys in

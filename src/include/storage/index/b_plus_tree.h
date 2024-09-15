@@ -117,7 +117,14 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *txn = nullptr);
 
  private:
-  
+
+  enum FindLeafRetType{
+    EmptyTree=0,
+    NotExist,
+    Success
+  };
+
+  auto FindLeafPageWithKey(const KeyType& key, page_id_t& leaf_page_id) const ->FindLeafRetType;
 
   /* Debug Routines for FREE!! */
   void ToGraph(page_id_t page_id, const BPlusTreePage *page, std::ofstream &out);
@@ -139,7 +146,7 @@ class BPlusTree {
   std::vector<std::string> log;  // NOLINT
   int leaf_max_size_;
   int internal_max_size_;
-  page_id_t header_page_id_;
+  page_id_t header_page_id_; // 存放root_page_id的page
 };
 
 /**
