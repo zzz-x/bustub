@@ -57,6 +57,52 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType {
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType { return array_[index].second; }
 
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::PushBack(const KeyType &key, const ValueType &value) {
+  array_[GetSize()] = {key, value};
+  IncreaseSize(1);
+  return;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comp) -> bool {
+  auto curr_size = GetSize();
+  auto max_size = GetMaxSize();
+  if (curr_size < max_size - 1) {
+    return InsertInLeaf(key, value, comp);
+  }
+  return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::InsertInLeaf(const KeyType &key, const ValueType &value,
+                                              const KeyComparator &comp) -> bool {
+  BUSTUB_ENSURE(GetSize() != 0, "Leaf Page must have keys");
+  auto first_key = KeyAt(0);
+
+  if (comp(key, first_key) < 0) {
+    // insert before first key
+    this->InsertBefore(key, value, 0);
+  } else {
+    int idx = 0;
+    int key_size = GetSize();
+    for (idx = 0; idx < key_size; ++idx) {
+      if (comp(key, KeyAt(idx)) < 0) {
+        break;
+      }
+    }
+    this->InsertBefore(key, value, idx);
+  }
+  return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAndSplit(const KeyType &key, const ValueType &value,
+                                                const KeyComparator &comp) -> bool {
+  BUSTUB_ENSURE(GetSize() != 0, "Leaf page must have keys");
+  return true;
+}
+
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
 template class BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>>;
 template class BPlusTreeLeafPage<GenericKey<16>, RID, GenericComparator<16>>;

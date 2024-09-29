@@ -1,11 +1,14 @@
 #include <sstream>
 #include <string>
 #include <optional>
+#include <vector>
 
 #include "common/exception.h"
 #include "common/logger.h"
 #include "common/rid.h"
 #include "storage/index/b_plus_tree.h"
+
+
 
 namespace bustub {
 
@@ -56,7 +59,7 @@ auto BPLUSTREE_TYPE::FindLeafPageWithKey(const KeyType& key,page_id_t& leaf_page
     int key_idx=1;
     for(key_idx=1;key_idx<internal_page->GetSize();++key_idx){
       KeyType curr_key = internal_page->KeyAt(key_idx);
-      if(comparator_(key,curr_key)) {break;}
+      if(comparator_(key,curr_key) < 0) {break;}
     }
     int val_idx =key_idx;
     if(key_idx != internal_page->GetSize()){
@@ -103,7 +106,7 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   bool found = false;
   for (int idx = 0; idx < leaf->GetSize(); ++idx) {
     auto curr_key = leaf->KeyAt(idx);
-    if (!comparator_(curr_key, key) && !comparator_(key, curr_key)) {
+    if (comparator_(curr_key, key) == 0) {
       result->emplace_back(leaf->ValueAt(idx));
       found = true;
     }
@@ -114,6 +117,68 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   }
 
   return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InsertAndSplitLeaf(const page_id_t leaf_page_id,const KeyType&key,const ValueType& value,Context& ctx)->bool{
+  // 拿到原始的leaf node
+  auto old_leaf_guard = bpm_->FetchPageWrite(leaf_page_id);
+  LeafPage* old_leaf_node = old_leaf_guard.AsMut<LeafPage>();
+
+  int old_leaf_size = old_leaf_node->GetSize();
+
+  // 临时变量存储 leaf node中的kv对，后续可以优化
+  // TODO： 减少此处的拷贝
+  std::vector<MappingType> temp;
+  {
+    temp.reserve(old_leaf_size+1);
+    BUSTUB_ASSERT(old_leaf_size == old_leaf_node->GetMaxSize()-1,"When doing split,leaf node must have n-1 values");
+    for(int idx=0;idx<old_leaf_size;++idx){
+      temp.emplace_back(old_leaf_node->KeyAt(idx),old_leaf_node->ValueAt(idx));
+    }
+    Insert2SorrtedList(temp,{key,value},comparator_);
+  }
+
+  page_id_t new_leaf_page_id;
+  auto new_leaf_guard = bpm_->NewPageGuarded(&new_leaf_page_id);
+  LeafPage* new_leaf_node = new_leaf_guard.AsMut<LeafPage>();
+
+  new_leaf_node->SetNextPageId(old_leaf_node->GetNextPageId());
+  old_leaf_node->SetNextPageId(new_leaf_page_id);
+
+  // 将temp中存储的kv对分配到两个leaf node中
+  {
+    size_t half_size = temp.size()/2;
+    old_leaf_node->SetSize(0); // clear old node
+    for(size_t idx = 0;idx<half_size;++idx){
+      old_leaf_node->PushBack(temp[idx].first,temp[idx].second);
+    }
+    for(size_t idx = half_size;idx<temp.size();++idx){
+      new_leaf_node->PushBack(temp[idx].first,temp[idx].second);
+    }
+  }
+
+  KeyType new_key = new_leaf_node->KeyAt(0);
+  page_id_t left_leaf_node =leaf_page_id;
+  page_id_t right_leaf_node = new_leaf_page_id;
+  page_id_t parent_leaf_page_id = 0; // TODO: get parent id from ctx
+  return InsertAndSplitInternal(parent_leaf_page_id,left_leaf_node,new_key,right_leaf_node,ctx);
+}
+
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InsertAndSplitInternal(const page_id_t internal_page_id,const page_id_t lower_range_id,const KeyType& key,const page_id_t upper_range_id,Context& ctx ) -> bool
+{
+  //  get old node parent (context)
+  // parent with enough key, just insert 
+
+  //  create new internal node(fetch new page)
+  // save n kv pair
+  // insert a new kv pair
+  // allocate [0,(n+1)/2) -> old node ,allocate [(n+1)/2,n+1] -> new node
+  // pop parent node (context)
+  // insert and split internal(old_node_parent, new k, new internal node)
+  return false;
 }
 
 /*****************************************************************************
@@ -150,6 +215,13 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   }
 
   // 向leaf page中插入key value
+  {
+    // auto guard = bpm_->FetchPageWrite(leaf_page_id);
+    // LeafPage* leaf_page = guard.AsMut<LeafPage>();
+    // TODO
+    // leaf_page->insert()
+  }
+
 
   return false;
 }

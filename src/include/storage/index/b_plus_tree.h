@@ -124,6 +124,17 @@ class BPlusTree {
     Success
   };
 
+  /**
+   * @brief Insert a key into a leaf page and do spliting
+   * 
+   * @param leaf_page_id  
+   * @param ctx context of inserting
+   * @return successful
+   */
+  auto InsertAndSplitLeaf(const page_id_t leaf_page_id,const KeyType&key,const ValueType& value,Context& ctx) -> bool;
+
+  auto InsertAndSplitInternal(const page_id_t internal_page_id,const page_id_t lower_range_id,const KeyType& key,const page_id_t upper_range_id, Context& ctx)->bool;
+
   auto FindLeafPageWithKey(const KeyType& key, page_id_t& leaf_page_id) const ->FindLeafRetType;
 
   /* Debug Routines for FREE!! */
