@@ -25,25 +25,25 @@ namespace bustub {
 #define INDEX_TEMPLATE_ARGUMENTS template <typename KeyType, typename ValueType, typename KeyComparator>
 
 INDEX_TEMPLATE_ARGUMENTS
-void Insert2SorrtedList(std::vector<MappingType>& list,const MappingType& elem,const KeyComparator& comp)
-{
-  if(list.empty()){
-    list={elem};
+void Insert2SorrtedList(std::vector<MappingType> &list, const MappingType &elem, const KeyComparator &comp) {
+  if (list.empty()) {
+    list = {elem};
     return;
   }
 
   size_t idx;
   // 寻找list中第一个比elem大的元素
-  for(idx=0;idx<list.size();++idx){
-    if(comp(elem.first,list[idx].first)<0) { break; }
+  for (idx = 0; idx < list.size(); ++idx) {
+    if (comp(elem.first, list[idx].first) < 0) {
+      break;
+    }
   }
 
-  if(idx == list.size()){
+  if (idx == list.size()) {
     // elem比list中所有元素都大
     list.emplace_back(elem);
-  }
-  else{
-    list.insert(list.begin()+idx,elem);
+  } else {
+    list.insert(list.begin() + idx, elem);
   }
 }
 

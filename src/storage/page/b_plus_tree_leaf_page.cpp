@@ -75,8 +75,8 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &val
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::InsertInLeaf(const KeyType &key, const ValueType &value,
-                                              const KeyComparator &comp) -> bool {
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::InsertInLeaf(const KeyType &key, const ValueType &value, const KeyComparator &comp)
+    -> bool {
   BUSTUB_ENSURE(GetSize() != 0, "Leaf Page must have keys");
   auto first_key = KeyAt(0);
 
@@ -97,8 +97,8 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::InsertInLeaf(const KeyType &key, const ValueTyp
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAndSplit(const KeyType &key, const ValueType &value,
-                                                const KeyComparator &comp) -> bool {
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAndSplit(const KeyType &key, const ValueType &value, const KeyComparator &comp)
+    -> bool {
   BUSTUB_ENSURE(GetSize() != 0, "Leaf page must have keys");
   return true;
 }

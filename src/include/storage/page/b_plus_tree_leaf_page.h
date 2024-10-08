@@ -60,9 +60,9 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto KeyAt(int index) const -> KeyType;
   auto ValueAt(int index) const -> ValueType;
 
-  void PushBack(const KeyType& key,const ValueType& value);
+  void PushBack(const KeyType &key, const ValueType &value);
 
-  auto Insert(const KeyType&key,const ValueType& value,const KeyComparator& comp) -> bool;
+  auto Insert(const KeyType &key, const ValueType &value, const KeyComparator &comp) -> bool;
 
   /**
    * @brief for test only return a string representing all keys in
@@ -90,10 +90,11 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   }
 
  private:
-  auto InsertInLeaf(const KeyType& key, const ValueType& value, const KeyComparator& comp) -> bool;
-  auto InsertAndSplit(const KeyType & key, const ValueType& value, const KeyComparator& comp) -> bool;
-  auto InsertBefore(const KeyType& key, const ValueType& value, size_t idx) -> bool;
-  auto InsertAfter (const KeyType& key ,const ValueType& value, size_t idx) -> bool;
+  auto InsertInLeaf(const KeyType &key, const ValueType &value, const KeyComparator &comp) -> bool;
+  auto InsertAndSplit(const KeyType &key, const ValueType &value, const KeyComparator &comp) -> bool;
+  auto InsertBefore(const KeyType &key, const ValueType &value, size_t idx) -> bool;
+  auto InsertAfter(const KeyType &key, const ValueType &value, size_t idx) -> bool;
+
  private:
   page_id_t next_page_id_;
   // Flexible array member for page data.

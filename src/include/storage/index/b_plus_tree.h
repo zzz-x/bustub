@@ -117,25 +117,22 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *txn = nullptr);
 
  private:
-
-  enum FindLeafRetType{
-    EmptyTree=0,
-    NotExist,
-    Success
-  };
+  enum FindLeafRetType { EmptyTree = 0, NotExist, Success };
 
   /**
    * @brief Insert a key into a leaf page and do spliting
-   * 
-   * @param leaf_page_id  
+   *
+   * @param leaf_page_id
    * @param ctx context of inserting
    * @return successful
    */
-  auto InsertAndSplitLeaf(const page_id_t leaf_page_id,const KeyType&key,const ValueType& value,Context& ctx) -> bool;
+  auto InsertAndSplitLeaf(const page_id_t leaf_page_id, const KeyType &key, const ValueType &value, Context &ctx)
+      -> bool;
 
-  auto InsertAndSplitInternal(const page_id_t internal_page_id,const page_id_t lower_range_id,const KeyType& key,const page_id_t upper_range_id, Context& ctx)->bool;
+  auto InsertAndSplitInternal(const page_id_t internal_page_id, const page_id_t lower_range_id, const KeyType &key,
+                              const page_id_t upper_range_id, Context &ctx) -> bool;
 
-  auto FindLeafPageWithKey(const KeyType& key, page_id_t& leaf_page_id) const ->FindLeafRetType;
+  auto FindLeafPageWithKey(const KeyType &key, page_id_t &leaf_page_id, Context &ctx) const -> FindLeafRetType;
 
   /* Debug Routines for FREE!! */
   void ToGraph(page_id_t page_id, const BPlusTreePage *page, std::ofstream &out);
@@ -157,7 +154,7 @@ class BPlusTree {
   std::vector<std::string> log;  // NOLINT
   int leaf_max_size_;
   int internal_max_size_;
-  page_id_t header_page_id_; // 存放root_page_id的page
+  page_id_t header_page_id_;  // 存放root_page_id的page
 };
 
 /**

@@ -1,14 +1,12 @@
+#include <optional>
 #include <sstream>
 #include <string>
-#include <optional>
 #include <vector>
 
 #include "common/exception.h"
 #include "common/logger.h"
 #include "common/rid.h"
 #include "storage/index/b_plus_tree.h"
-
-
 
 namespace bustub {
 
@@ -32,52 +30,52 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
 
-
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::FindLeafPageWithKey(const KeyType& key,page_id_t& leaf_page_id) const ->FindLeafRetType
-{
+auto BPLUSTREE_TYPE::FindLeafPageWithKey(const KeyType &key, page_id_t &leaf_page_id, Context &ctx) const
+    -> FindLeafRetType {
   // 先从header_page_id中读取page_id
   page_id_t root_page_id = INVALID_PAGE_ID;
   {
     ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
-    const BPlusTreeHeaderPage* header_page = guard.As<BPlusTreeHeaderPage>();
+    const BPlusTreeHeaderPage *header_page = guard.As<BPlusTreeHeaderPage>();
     root_page_id = header_page->root_page_id_;
   }
-  if(root_page_id == INVALID_PAGE_ID){
+  // 保存root_page_id到context
+  ctx.root_page_id_ = root_page_id;
+  if (root_page_id == INVALID_PAGE_ID) {
     return FindLeafRetType::EmptyTree;
   }
 
-  auto curr_guard =bpm_->FetchPageRead(root_page_id);
+  auto curr_guard = bpm_->FetchPageRead(root_page_id);
   auto curr_page = curr_guard.As<BPlusTreePage>();
   auto curr_page_id = root_page_id;
 
-  while(!curr_page->IsLeafPage()){
-    const InternalPage* internal_page = curr_guard.As<InternalPage>();
-    BUSTUB_ASSERT(internal_page!=nullptr , "Page should be internal");
+  while (!curr_page->IsLeafPage()) {
+    const InternalPage *internal_page = curr_guard.As<InternalPage>();
+    BUSTUB_ASSERT(internal_page != nullptr, "Page should be internal");
     // 寻找key落在的区间，由于存储的结构，需要从index=1开始遍历
     // 左闭右开
-    int key_idx=1;
-    for(key_idx=1;key_idx<internal_page->GetSize();++key_idx){
+    int key_idx = 1;
+    for (key_idx = 1; key_idx < internal_page->GetSize(); ++key_idx) {
       KeyType curr_key = internal_page->KeyAt(key_idx);
-      if(comparator_(key,curr_key) < 0) {break;}
+      if (comparator_(key, curr_key) < 0) {
+        break;
+      }
     }
-    int val_idx =key_idx;
-    if(key_idx != internal_page->GetSize()){
-      val_idx=key_idx-1;
+    int val_idx = key_idx;
+    if (key_idx != internal_page->GetSize()) {
+      val_idx = key_idx - 1;
     }
-
-    curr_page_id=internal_page->ValueAt(val_idx);
-    curr_guard=bpm_->FetchPageRead(curr_page_id);
-    curr_page= curr_guard.As<BPlusTreePage>();
+    ctx.read_set_.push_back(std::move(curr_guard));
+    curr_page_id = internal_page->ValueAt(val_idx);
+    curr_guard = bpm_->FetchPageRead(curr_page_id);
+    curr_page = curr_guard.As<BPlusTreePage>();
   }
 
   leaf_page_id = curr_page_id;
 
   return FindLeafRetType::Success;
 }
-
-
-
 
 /*****************************************************************************
  * SEARCH
@@ -95,8 +93,8 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
 
   page_id_t leaf_page_id;
   // 先找到key所在的leaf page
-  auto flag=FindLeafPageWithKey(key,leaf_page_id);
-  if(flag !=FindLeafRetType::Success){
+  auto flag = FindLeafPageWithKey(key, leaf_page_id, ctx);
+  if (flag != FindLeafRetType::Success) {
     return false;
   }
 
@@ -120,10 +118,11 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertAndSplitLeaf(const page_id_t leaf_page_id,const KeyType&key,const ValueType& value,Context& ctx)->bool{
+auto BPLUSTREE_TYPE::InsertAndSplitLeaf(const page_id_t leaf_page_id, const KeyType &key, const ValueType &value,
+                                        Context &ctx) -> bool {
   // 拿到原始的leaf node
   auto old_leaf_guard = bpm_->FetchPageWrite(leaf_page_id);
-  LeafPage* old_leaf_node = old_leaf_guard.AsMut<LeafPage>();
+  LeafPage *old_leaf_node = old_leaf_guard.AsMut<LeafPage>();
 
   int old_leaf_size = old_leaf_node->GetSize();
 
@@ -131,46 +130,47 @@ auto BPLUSTREE_TYPE::InsertAndSplitLeaf(const page_id_t leaf_page_id,const KeyTy
   // TODO： 减少此处的拷贝
   std::vector<MappingType> temp;
   {
-    temp.reserve(old_leaf_size+1);
-    BUSTUB_ASSERT(old_leaf_size == old_leaf_node->GetMaxSize()-1,"When doing split,leaf node must have n-1 values");
-    for(int idx=0;idx<old_leaf_size;++idx){
-      temp.emplace_back(old_leaf_node->KeyAt(idx),old_leaf_node->ValueAt(idx));
+    temp.reserve(old_leaf_size + 1);
+    BUSTUB_ASSERT(old_leaf_size == old_leaf_node->GetMaxSize() - 1, "When doing split,leaf node must have n-1 values");
+    for (int idx = 0; idx < old_leaf_size; ++idx) {
+      temp.emplace_back(old_leaf_node->KeyAt(idx), old_leaf_node->ValueAt(idx));
     }
-    Insert2SorrtedList(temp,{key,value},comparator_);
+    Insert2SorrtedList(temp, {key, value}, comparator_);
   }
 
   page_id_t new_leaf_page_id;
   auto new_leaf_guard = bpm_->NewPageGuarded(&new_leaf_page_id);
-  LeafPage* new_leaf_node = new_leaf_guard.AsMut<LeafPage>();
+  LeafPage *new_leaf_node = new_leaf_guard.AsMut<LeafPage>();
 
+  // 新创建一个叶子结点，并将原来的叶子结点与新创建的结点相连
   new_leaf_node->SetNextPageId(old_leaf_node->GetNextPageId());
   old_leaf_node->SetNextPageId(new_leaf_page_id);
 
   // 将temp中存储的kv对分配到两个leaf node中
   {
-    size_t half_size = temp.size()/2;
-    old_leaf_node->SetSize(0); // clear old node
-    for(size_t idx = 0;idx<half_size;++idx){
-      old_leaf_node->PushBack(temp[idx].first,temp[idx].second);
+    size_t half_size = temp.size() / 2;
+    old_leaf_node->SetSize(0);  // clear old node
+    for (size_t idx = 0; idx < half_size; ++idx) {
+      old_leaf_node->PushBack(temp[idx].first, temp[idx].second);
     }
-    for(size_t idx = half_size;idx<temp.size();++idx){
-      new_leaf_node->PushBack(temp[idx].first,temp[idx].second);
+    for (size_t idx = half_size; idx < temp.size(); ++idx) {
+      new_leaf_node->PushBack(temp[idx].first, temp[idx].second);
     }
   }
 
   KeyType new_key = new_leaf_node->KeyAt(0);
-  page_id_t left_leaf_node =leaf_page_id;
+  page_id_t left_leaf_node = leaf_page_id;
   page_id_t right_leaf_node = new_leaf_page_id;
-  page_id_t parent_leaf_page_id = 0; // TODO: get parent id from ctx
-  return InsertAndSplitInternal(parent_leaf_page_id,left_leaf_node,new_key,right_leaf_node,ctx);
+  page_id_t parent_leaf_page_id = ctx.read_set_.back().PageId();
+  ctx.read_set_.pop_back();
+  return InsertAndSplitInternal(parent_leaf_page_id, left_leaf_node, new_key, right_leaf_node, ctx);
 }
 
-
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertAndSplitInternal(const page_id_t internal_page_id,const page_id_t lower_range_id,const KeyType& key,const page_id_t upper_range_id,Context& ctx ) -> bool
-{
+auto BPLUSTREE_TYPE::InsertAndSplitInternal(const page_id_t internal_page_id, const page_id_t lower_range_id,
+                                            const KeyType &key, const page_id_t upper_range_id, Context &ctx) -> bool {
   //  get old node parent (context)
-  // parent with enough key, just insert 
+  // parent with enough key, just insert
 
   //  create new internal node(fetch new page)
   // save n kv pair
@@ -199,19 +199,21 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
   page_id_t leaf_page_id;
   // 找到Key应该处于的leaf_page
-  auto flag = FindLeafPageWithKey(key,leaf_page_id);
+  auto flag = FindLeafPageWithKey(key, leaf_page_id, ctx);
 
-  if(flag==FindLeafRetType::EmptyTree){
+  if (flag == FindLeafRetType::EmptyTree) {
     auto guard = bpm_->NewPageGuarded(&leaf_page_id);
-    LeafPage* root_page =guard.AsMut<LeafPage>();
+    LeafPage *root_page = guard.AsMut<LeafPage>();
     root_page->Init(this->leaf_max_size_);
     // 将新的root_page_id记录到header_page_id中
-    auto header_page_guard=bpm_->FetchPageWrite(header_page_id_);
+    auto header_page_guard = bpm_->FetchPageWrite(header_page_id_);
     auto head_page = header_page_guard.AsMut<BPlusTreeHeaderPage>();
-    head_page->root_page_id_=leaf_page_id;
-  }
-  else{
-    BUSTUB_ASSERT(flag==FindLeafRetType::Success,"Should always find the leaf page of the key");
+    head_page->root_page_id_ = leaf_page_id;
+    // 将新的root_page_id记录到ctx中
+    BUSTUB_ASSERT(ctx.root_page_id_ == INVALID_PAGE_ID, "Root page id should be invalid in empty tree");
+    ctx.root_page_id_ = leaf_page_id;
+  } else {
+    BUSTUB_ASSERT(flag == FindLeafRetType::Success, "Should always find the leaf page of the key");
   }
 
   // 向leaf page中插入key value
@@ -221,7 +223,6 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     // TODO
     // leaf_page->insert()
   }
-
 
   return false;
 }
