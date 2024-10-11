@@ -216,15 +216,13 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     BUSTUB_ASSERT(flag == FindLeafRetType::Success, "Should always find the leaf page of the key");
   }
 
-  // 向leaf page中插入key value
-  {
-    // auto guard = bpm_->FetchPageWrite(leaf_page_id);
-    // LeafPage* leaf_page = guard.AsMut<LeafPage>();
-    // TODO
-    // leaf_page->insert()
+  auto guard = bpm_->FetchPageWrite(leaf_page_id);
+  LeafPage *leaf_page = guard.AsMut<LeafPage>();
+  if (leaf_page->GetSize() < leaf_page->GetMaxSize() - 1) {
+    return leaf_page->Insert(key, value, comparator_);
   }
 
-  return false;
+  return InsertAndSplitLeaf(leaf_page_id, key, value, ctx);
 }
 
 /*****************************************************************************

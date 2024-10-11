@@ -61,7 +61,6 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto ValueAt(int index) const -> ValueType;
 
   void PushBack(const KeyType &key, const ValueType &value);
-
   auto Insert(const KeyType &key, const ValueType &value, const KeyComparator &comp) -> bool;
 
   /**
@@ -90,10 +89,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   }
 
  private:
-  auto InsertInLeaf(const KeyType &key, const ValueType &value, const KeyComparator &comp) -> bool;
-  auto InsertAndSplit(const KeyType &key, const ValueType &value, const KeyComparator &comp) -> bool;
-  auto InsertBefore(const KeyType &key, const ValueType &value, size_t idx) -> bool;
-  auto InsertAfter(const KeyType &key, const ValueType &value, size_t idx) -> bool;
+  auto InsertBefore(const KeyType &key, const ValueType &value, int idx) -> bool;
+  auto InsertAfter(const KeyType &key, const ValueType &value, int idx) -> bool;
 
  private:
   page_id_t next_page_id_;

@@ -73,7 +73,7 @@ class ThreadPool {
 
   // 添加任务到线程池
   template <class F, class... Args>
-  auto Enqueue(F &&func, Args &&...args) -> std::future<decltype(func(std::forward<Args>(args)...))> {
+  auto Enqueue(F &&func, Args &&... args) -> std::future<decltype(func(std::forward<Args>(args)...))> {
     using ret_t = decltype(func(std::forward<Args>(args)...));
     auto task = std::make_shared<std::packaged_task<ret_t()>>([func, args...]() { func(args...); });
     std::future<ret_t> ret = task->get_future();
