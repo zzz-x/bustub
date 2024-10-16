@@ -124,15 +124,17 @@ auto BPLUSTREE_TYPE::InsertAndSplitLeaf(const page_id_t leaf_page_id, const KeyT
   auto old_leaf_guard = bpm_->FetchPageWrite(leaf_page_id);
   LeafPage *old_leaf_node = old_leaf_guard.AsMut<LeafPage>();
 
-  int old_leaf_size = old_leaf_node->GetSize();
+  int leaf_node_size = old_leaf_node->GetSize();
+  int leaf_node_max_size = old_leaf_node->GetMaxSize();
+
+  BUSTUB_ENSURE(leaf_node_size == leaf_node_max_size - 1, "When doing split,leaf node must have n-1 values");
 
   // 临时变量存储 leaf node中的kv对，后续可以优化
   // TODO： 减少此处的拷贝
   std::vector<MappingType> temp;
   {
-    temp.reserve(old_leaf_size + 1);
-    BUSTUB_ASSERT(old_leaf_size == old_leaf_node->GetMaxSize() - 1, "When doing split,leaf node must have n-1 values");
-    for (int idx = 0; idx < old_leaf_size; ++idx) {
+    temp.reserve(leaf_node_size + 1);
+    for (int idx = 0; idx < leaf_node_size; ++idx) {
       temp.emplace_back(old_leaf_node->KeyAt(idx), old_leaf_node->ValueAt(idx));
     }
     Insert2SorrtedList(temp, {key, value}, comparator_);
@@ -148,12 +150,12 @@ auto BPLUSTREE_TYPE::InsertAndSplitLeaf(const page_id_t leaf_page_id, const KeyT
 
   // 将temp中存储的kv对分配到两个leaf node中
   {
-    size_t half_size = temp.size() / 2;
+    size_t half_size = (size_t)std::ceil(leaf_node_max_size / 2);
     old_leaf_node->SetSize(0);  // clear old node
-    for (size_t idx = 0; idx < half_size; ++idx) {
+    for (size_t idx = 0; idx <= half_size; ++idx) {
       old_leaf_node->PushBack(temp[idx].first, temp[idx].second);
     }
-    for (size_t idx = half_size; idx < temp.size(); ++idx) {
+    for (size_t idx = half_size + 1; idx < temp.size(); ++idx) {
       new_leaf_node->PushBack(temp[idx].first, temp[idx].second);
     }
   }
@@ -162,23 +164,61 @@ auto BPLUSTREE_TYPE::InsertAndSplitLeaf(const page_id_t leaf_page_id, const KeyT
   page_id_t left_leaf_node = leaf_page_id;
   page_id_t right_leaf_node = new_leaf_page_id;
   page_id_t parent_leaf_page_id = ctx.read_set_.back().PageId();
-  ctx.read_set_.pop_back();
+  ctx.read_set_.pop_back();  // 退回到父节点处理
   return InsertAndSplitInternal(parent_leaf_page_id, left_leaf_node, new_key, right_leaf_node, ctx);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InsertAndSplitInternal(const page_id_t internal_page_id, const page_id_t lower_range_id,
                                             const KeyType &key, const page_id_t upper_range_id, Context &ctx) -> bool {
-  //  get old node parent (context)
-  // parent with enough key, just insert
+  auto comp = [](const std::pair<KeyType, page_id_t> &a, const std::pair<KeyType, page_id_t> &b) -> int {
+    if (a.second == b.second) {
+      return 0;
+    }
+    if (a.second > b.second) {
+      return 1;
+    }
+    return -1;
+  };
+  if (internal_page_id == ctx.root_page_id_) {
+    // 单独写
+  }
 
-  //  create new internal node(fetch new page)
-  // save n kv pair
-  // insert a new kv pair
-  // allocate [0,(n+1)/2) -> old node ,allocate [(n+1)/2,n+1] -> new node
-  // pop parent node (context)
-  // insert and split internal(old_node_parent, new k, new internal node)
-  return false;
+  auto internal_guard = bpm_->FetchPageWrite(internal_page_id);
+  InternalPage *internal_node = internal_guard.AsMut<InternalPage>();
+
+  int internal_node_size = internal_node->GetSize();
+  int internal_node_max_size = internal_node->GetMaxSize();
+
+  if (internal_node_size < internal_node_max_size) {
+    // 不需要split的时候，直接插入
+    internal_node->InsertVal(key, upper_range_id, comp);
+    return true;
+  }
+  std::vector<std::pair<KeyType, page_id_t>> temp;
+  temp.reserve(internal_node_size + 1);
+  for (int idx = 0; idx < internal_node_size; ++idx) {
+    temp.emplace_back(internal_node->KeyAt(idx), internal_node->ValueAt(idx));
+  }
+  Insert2SorrtedList(temp, {key, upper_range_id}, comp);
+  internal_node->SetSize(0);
+  page_id_t new_internal_page_id;
+  auto new_internal_guard = bpm_->NewPageGuarded(&new_internal_page_id);
+  InternalPage *new_internal_node = new_internal_guard.AsMut<InternalPage>();
+
+  size_t split_size = std::ceil((internal_node_max_size + 1) / 2.f);
+  for (size_t idx = 0; idx <= split_size; ++idx) {
+    internal_node->InsertVal(temp[idx].first, temp[idx].second, comp);
+  }
+  for (size_t idx = split_size + 1; idx < (size_t)internal_node_max_size + 1; ++idx) {
+    new_internal_node->InsertVal(temp[idx].first, temp[idx].second, comp);
+  }
+
+  KeyType new_key = temp[split_size].first;
+
+  page_id_t parent_internal_page_id = ctx.read_set_.back().PageId();
+  ctx.read_set_.pop_back();
+  return InsertAndSplitInternal(parent_internal_page_id, internal_page_id, new_key, new_internal_page_id, ctx);
 }
 
 /*****************************************************************************
@@ -198,7 +238,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   (void)ctx;
 
   page_id_t leaf_page_id;
-  // 找到Key应该处于的leaf_page
+  // 找到Key应该处于的leaf_page，ctx中记录节点
   auto flag = FindLeafPageWithKey(key, leaf_page_id, ctx);
 
   if (flag == FindLeafRetType::EmptyTree) {
@@ -218,6 +258,8 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
   auto guard = bpm_->FetchPageWrite(leaf_page_id);
   LeafPage *leaf_page = guard.AsMut<LeafPage>();
+
+  // 如果不需要split，直接插入到叶子结点中
   if (leaf_page->GetSize() < leaf_page->GetMaxSize() - 1) {
     return leaf_page->Insert(key, value, comparator_);
   }

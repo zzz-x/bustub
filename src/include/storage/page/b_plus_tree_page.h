@@ -24,8 +24,9 @@ namespace bustub {
 
 #define INDEX_TEMPLATE_ARGUMENTS template <typename KeyType, typename ValueType, typename KeyComparator>
 
-INDEX_TEMPLATE_ARGUMENTS
-void Insert2SorrtedList(std::vector<MappingType> &list, const MappingType &elem, const KeyComparator &comp) {
+template <typename KeyType, typename ValueType, typename KeyComparator>
+void Insert2SorrtedList(std::vector<std::pair<KeyType, ValueType>> &list, const std::pair<KeyType, ValueType> &elem,
+                        const KeyComparator &comp) {
   if (list.empty()) {
     list = {elem};
     return;
