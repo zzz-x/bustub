@@ -35,6 +35,7 @@ namespace bustub {
  *  --------------------------------------------------------------------------
  */
 INDEX_TEMPLATE_ARGUMENTS
+/// @brief 
 class BPlusTreeInternalPage : public BPlusTreePage {
  public:
   // Deleted to disallow initialization
@@ -62,6 +63,15 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void SetKeyAt(int index, const KeyType &key);
 
   /**
+   * @brief 
+   * @param index The index of the value to set. Index starts from zero
+   * @param value The new value
+   */
+  void SetValueAt(int index, const ValueType&value);
+
+  void SetKeyValueAt(int index, const KeyType& key,const ValueType& value);
+
+  /**
    *
    * @param value the value to search for
    */
@@ -74,7 +84,7 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    */
   auto ValueAt(int index) const -> ValueType;
 
-  void InsertVal(const KeyType &key, ValueType value, const KeyComparator &comparator);
+  void InsertVal(const KeyType &key, const ValueType& value, const KeyComparator &comparator);
 
   // 二分查找第一个大于等于key的位置，可以用来查询
   int FindKeyIndexLowerBound(const KeyType &key, const KeyComparator &comparator);

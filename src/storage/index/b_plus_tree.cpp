@@ -171,17 +171,15 @@ auto BPLUSTREE_TYPE::InsertAndSplitLeaf(const page_id_t leaf_page_id, const KeyT
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InsertAndSplitInternal(const page_id_t internal_page_id, const page_id_t lower_range_id,
                                             const KeyType &key, const page_id_t upper_range_id, Context &ctx) -> bool {
-  auto comp = [](const std::pair<KeyType, page_id_t> &a, const std::pair<KeyType, page_id_t> &b) -> int {
-    if (a.second == b.second) {
-      return 0;
-    }
-    if (a.second > b.second) {
-      return 1;
-    }
-    return -1;
-  };
   if (internal_page_id == ctx.root_page_id_) {
-    // 单独写
+    // 如果是root page 也要分裂，则新建一个节点
+    page_id_t new_root_page_id;
+    auto new_root_guard = bpm_->NewPageGuarded(&new_root_page_id);
+    InternalPage* new_root_node = new_root_guard.AsMut<InternalPage>();
+    new_root_node->Init();
+    new_root_node->SetKeyValueAt(0,key,upper_range_id);
+    ctx.root_page_id_ = new_root_page_id;
+    return true;
   }
 
   auto internal_guard = bpm_->FetchPageWrite(internal_page_id);
@@ -192,7 +190,7 @@ auto BPLUSTREE_TYPE::InsertAndSplitInternal(const page_id_t internal_page_id, co
 
   if (internal_node_size < internal_node_max_size) {
     // 不需要split的时候，直接插入
-    internal_node->InsertVal(key, upper_range_id, comp);
+    internal_node->InsertVal(key, upper_range_id, comparator_);
     return true;
   }
   std::vector<std::pair<KeyType, page_id_t>> temp;
@@ -200,7 +198,7 @@ auto BPLUSTREE_TYPE::InsertAndSplitInternal(const page_id_t internal_page_id, co
   for (int idx = 0; idx < internal_node_size; ++idx) {
     temp.emplace_back(internal_node->KeyAt(idx), internal_node->ValueAt(idx));
   }
-  Insert2SorrtedList(temp, {key, upper_range_id}, comp);
+  Insert2SorrtedList(temp, {key, upper_range_id}, comparator_);
   internal_node->SetSize(0);
   page_id_t new_internal_page_id;
   auto new_internal_guard = bpm_->NewPageGuarded(&new_internal_page_id);
@@ -208,10 +206,10 @@ auto BPLUSTREE_TYPE::InsertAndSplitInternal(const page_id_t internal_page_id, co
 
   size_t split_size = std::ceil((internal_node_max_size + 1) / 2.f);
   for (size_t idx = 0; idx <= split_size; ++idx) {
-    internal_node->InsertVal(temp[idx].first, temp[idx].second, comp);
+    internal_node->InsertVal(temp[idx].first, temp[idx].second, comparator_);
   }
   for (size_t idx = split_size + 1; idx < (size_t)internal_node_max_size + 1; ++idx) {
-    new_internal_node->InsertVal(temp[idx].first, temp[idx].second, comp);
+    new_internal_node->InsertVal(temp[idx].first, temp[idx].second, comparator_);
   }
 
   KeyType new_key = temp[split_size].first;
@@ -264,6 +262,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     return leaf_page->Insert(key, value, comparator_);
   }
 
+  guard.Drop();
   return InsertAndSplitLeaf(leaf_page_id, key, value, ctx);
 }
 
@@ -315,7 +314,13 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); 
  * @return Page id of the root of this tree
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t { return 0; }
+auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t {
+  auto guard = bpm_->FetchPageRead(header_page_id_);
+  const auto *header_page = guard.As<BPlusTreeHeaderPage>();
+
+  return header_page->root_page_id_;
+   return 0; 
+}
 
 /*****************************************************************************
  * UTILITIES AND DEBUG

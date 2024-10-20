@@ -68,14 +68,14 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::InsertBefore(const KeyType &key, const ValueType &value, int idx) -> bool {
   int curr_size = GetSize();
   int max_size = GetMaxSize();
-  if (curr_size >= max_size - 1 || idx < 0 || idx >= curr_size) {
+  if (curr_size >= max_size - 1 || idx < 0 || idx > curr_size) {
     return false;
   }
 
   for (int i = curr_size + 1; i >= idx; --i) {
     array_[i] = array_[i - 1];
   }
-  array_[idx] = {key, value};
+  array_[idx] = std::make_pair(key, value);
   IncreaseSize(1);
   return true;
 }
@@ -100,8 +100,6 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comp) -> bool {
   int curr_size = GetSize();
   int max_size = GetMaxSize();
-
-  BUSTUB_ENSURE(GetSize() != 0, "Leaf Page must have keys");
 
   if (curr_size >= max_size - 1) {
     return false;

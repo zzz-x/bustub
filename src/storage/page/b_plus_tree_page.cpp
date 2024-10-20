@@ -28,7 +28,7 @@ void BPlusTreePage::SetPageType(IndexPageType page_type) { page_type_ = page_typ
 auto BPlusTreePage::GetSize() const -> int { return size_; }
 void BPlusTreePage::SetSize(int size) { size_ = size; }
 void BPlusTreePage::IncreaseSize(int amount) {
-  BUSTUB_ASSERT(size_ + amount < max_size_, "page size can't exceed max size");
+  BUSTUB_ASSERT(size_ + amount <= max_size_, "leaf size can't exceed max size");
   size_ += amount;
 }
 

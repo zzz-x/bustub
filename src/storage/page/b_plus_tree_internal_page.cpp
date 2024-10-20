@@ -35,16 +35,26 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  // 检查idx是否越界
-  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
-  return array_[index + 1].first;
+  BUSTUB_ASSERT(index <= GetSize(), "Invalid idx !");
+  return array_[index].first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
-  // 检查idx是否越界
-  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
-  array_[index + 1].first = key;
+  BUSTUB_ASSERT(index <= GetSize(), "Invalid idx !");
+  array_[index].first = key;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &value) {
+  BUSTUB_ASSERT(index <= GetSize(), "Invalid idx !");
+  array_[index].second = value;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyValueAt(int index, const KeyType &key, const ValueType &value) {
+  BUSTUB_ASSERT(index <= GetSize(), "InternalPage SetKeyValueAt idx out of bound!");
+  array_[index] = std::make_pair(key, value);
 }
 
 /*
@@ -54,12 +64,13 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
   // 检查idx是否越界
-  BUSTUB_ASSERT(index < GetSize(), "Invalid idx !");
+  BUSTUB_ASSERT(index <= GetSize(), "Invalid idx !");
   return array_[index].second;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertVal(const KeyType &key, ValueType value, const KeyComparator &comparator) {
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertVal(const KeyType &key, const ValueType &value,
+                                               const KeyComparator &comparator) {
   // TODO: check the function here
   int idx = FindKeyIndexLowerBound(key, comparator);  // key[idx]<=value
   int old_size = GetSize();
@@ -70,7 +81,8 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertVal(const KeyType &key, ValueType val
   }
   // 插入value
   array_[idx].first = key;
-  array_[idx].second = std::move(value);
+  array_[idx].second = value;
+  IncreaseSize(1);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
