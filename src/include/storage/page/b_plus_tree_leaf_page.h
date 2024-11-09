@@ -93,7 +93,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto InsertAfter(const KeyType &key, const ValueType &value, int idx) -> bool;
 
  private:
-  page_id_t next_page_id_;
+  page_id_t next_page_id_ {INVALID_PAGE_ID};
   // Flexible array member for page data.
   MappingType array_[0];
 };

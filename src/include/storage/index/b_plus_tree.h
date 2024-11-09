@@ -82,7 +82,7 @@ class BPlusTree {
   auto GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn = nullptr) -> bool;
 
   // Return the page id of the root node
-  auto GetRootPageId() -> page_id_t;
+  auto GetRootPageId() const -> page_id_t;
 
   // Index iterator
   auto Begin() -> INDEXITERATOR_TYPE;
@@ -119,6 +119,9 @@ class BPlusTree {
  private:
   enum FindLeafRetType { EmptyTree = 0, NotExist, Success };
 
+
+  // TODO: 把由leaf_page_id传入的参数尽可能都改成read/write guard，减少一次上锁
+
   /**
    * @brief Insert a key into a leaf page and do spliting
    *
@@ -129,8 +132,15 @@ class BPlusTree {
   auto InsertAndSplitLeaf(const page_id_t leaf_page_id, const KeyType &key, const ValueType &value, Context &ctx)
       -> bool;
 
-  auto InsertAndSplitInternal(const page_id_t internal_page_id, const page_id_t lower_range_id, const KeyType &key,
+  auto InsertAndSplitInternal(const std::optional<page_id_t>& internal_page_id, const page_id_t lower_range_id, const KeyType &key,
                               const page_id_t upper_range_id, Context &ctx) -> bool;
+
+  /**
+   * @brief Save the root page id to header_page
+   * @param root_page_id The new root_page_id
+   * @return successful
+   */
+  auto SetRootPageId(const page_id_t root_page_id) -> bool;
 
   auto FindLeafPageWithKey(const KeyType &key, page_id_t &leaf_page_id, Context &ctx) const -> FindLeafRetType;
 

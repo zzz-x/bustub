@@ -53,7 +53,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &valu
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyValueAt(int index, const KeyType &key, const ValueType &value) {
-  BUSTUB_ASSERT(index <= GetSize(), "InternalPage SetKeyValueAt idx out of bound!");
+  BUSTUB_ASSERT(index < GetMaxSize(), "InternalPage SetKeyValueAt idx out of bound!");
   array_[index] = std::make_pair(key, value);
 }
 
